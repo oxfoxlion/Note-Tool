@@ -54,7 +54,9 @@ export default function BoardsPage() {
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
             <div className="text-sm font-semibold text-slate-900">{board.name}</div>
-            <div className="mt-2 text-xs text-slate-500">Board ID: {board.id}</div>
+            <div className="mt-2 text-xs text-slate-500">
+              Cards: {board.card_count ?? 0}
+            </div>
           </Link>
         ))}
       </section>

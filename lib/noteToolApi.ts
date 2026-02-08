@@ -29,6 +29,7 @@ export type Board = {
   user_id: string;
   name: string;
   created_at: string;
+  card_count?: number;
 };
 
 export type UserSettings = {
