@@ -15,6 +15,7 @@ export default function CardDetailPage() {
   const router = useRouter();
   const cardId = params.id;
   const [card, setCard] = useState<Card | null>(null);
+  const [allCards, setAllCards] = useState<Card[]>([]);
   const [viewMode, setViewMode] = useState<'view' | 'edit' | 'split'>('view');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -22,14 +23,20 @@ export default function CardDetailPage() {
   const autosaveTimerRef = useRef<number | null>(null);
   const lastSavedRef = useRef<{ title: string; content: string }>({ title: '', content: '' });
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorWrapRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState('');
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionPos, setMentionPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const mentionMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
         const cards = await getCards();
-        const found =
-          cards.find((item) => String(item.id) === String(cardId)) || null;
+        setAllCards(cards);
+        const found = cards.find((item) => String(item.id) === String(cardId)) || null;
         setCard(found);
         if (found) {
           setTitle(found.title);
@@ -88,6 +95,43 @@ export default function CardDetailPage() {
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   }, [content, viewMode]);
+
+  useEffect(() => {
+    if (!showMentions) return;
+    const menu = mentionMenuRef.current;
+    if (!menu) return;
+    const adjust = () => {
+      const menuWidth = menu.offsetWidth;
+      const menuHeight = menu.offsetHeight;
+      const padding = 8;
+      let left = mentionPos.left;
+      let top = mentionPos.top;
+      if (left < padding) {
+        left = padding;
+      }
+      if (top < padding) {
+        top = padding;
+      }
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      if (left + menuWidth > viewportWidth - padding) {
+        left = Math.max(padding, viewportWidth - menuWidth - padding);
+      }
+      if (top + menuHeight > viewportHeight - padding) {
+        const above = mentionPos.top - (menuHeight + 8);
+        if (above >= padding) {
+          top = above;
+        } else {
+          top = Math.max(padding, viewportHeight - menuHeight - padding);
+        }
+      }
+      if (left !== mentionPos.left || top !== mentionPos.top) {
+        setMentionPos({ left, top });
+      }
+    };
+    const raf = requestAnimationFrame(adjust);
+    return () => cancelAnimationFrame(raf);
+  }, [showMentions, mentionPos]);
 
   const wrapSelection = (before: string, after: string = before) => {
     const el = editorRef.current;
@@ -177,6 +221,73 @@ export default function CardDetailPage() {
     setContent(lines.join('\n'));
   };
 
+  const getCaretCoordinates = (textarea: HTMLTextAreaElement, position: number) => {
+    const div = document.createElement('div');
+    const style = window.getComputedStyle(textarea);
+    div.style.position = 'absolute';
+    div.style.visibility = 'hidden';
+    div.style.whiteSpace = 'pre-wrap';
+    div.style.wordWrap = 'break-word';
+    div.style.left = '0px';
+    div.style.top = '0px';
+    div.style.font = style.font;
+    div.style.letterSpacing = style.letterSpacing;
+    div.style.padding = style.padding;
+    div.style.border = style.border;
+    div.style.boxSizing = style.boxSizing;
+    div.style.width = style.width;
+    div.style.lineHeight = style.lineHeight;
+    div.style.overflow = 'hidden';
+    div.textContent = textarea.value.substring(0, position);
+    const span = document.createElement('span');
+    span.textContent = textarea.value.substring(position) || '.';
+    div.appendChild(span);
+    document.body.appendChild(div);
+    const rect = span.getBoundingClientRect();
+    const textRect = textarea.getBoundingClientRect();
+    const top = rect.top - textRect.top + textarea.scrollTop;
+    const left = rect.left - textRect.left + textarea.scrollLeft;
+    const height = rect.height;
+    document.body.removeChild(div);
+    return { top, left, height };
+  };
+
+  const cardMap = useMemo(() => {
+    const map = new Map<number, Card>();
+    allCards.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [allCards]);
+
+  const mentionedIds = useMemo(() => {
+    const ids = new Set<number>();
+    const regex = /@\[\[(\d+)\|[^\]]+\]\]/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content))) {
+      ids.add(Number(match[1]));
+    }
+    return Array.from(ids);
+  }, [content]);
+
+  const incomingIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (!card) return [];
+    const regex = new RegExp(`@\\[\\[${card.id}\\|[^\\]]+\\]\\]`, 'g');
+    allCards.forEach((item) => {
+      if (item.id === card.id || !item.content) return;
+      if (regex.test(item.content)) {
+        ids.add(item.id);
+      }
+    });
+    return Array.from(ids);
+  }, [allCards, card]);
+
+  const linkedCards = Array.from(new Set([...mentionedIds, ...incomingIds]))
+    .map((id) => cardMap.get(id))
+    .filter((item): item is Card => Boolean(item));
+
+  const prepareMarkdown = (text: string) =>
+    text.replace(/@\[\[(\d+)\|([^\]]+)\]\]/g, '[@$2](/cards/$1)');
+
   const renderMarkdown = (text: string) => {
     const taskLines = text
       .split('\n')
@@ -208,7 +319,7 @@ export default function CardDetailPage() {
           },
         }}
       >
-        {text}
+        {prepareMarkdown(text)}
       </ReactMarkdown>
     );
   };
@@ -388,7 +499,30 @@ export default function CardDetailPage() {
             const el = event.currentTarget;
             el.style.height = 'auto';
             el.style.height = `${el.scrollHeight}px`;
-            setContent(event.target.value);
+            const nextValue = event.target.value;
+            setContent(nextValue);
+            const cursor = el.selectionStart ?? nextValue.length;
+            const before = nextValue.slice(0, cursor);
+            const match = before.match(/(^|\s)@([^\s@]*)$/);
+            if (match) {
+              const start = cursor - match[2].length - 1;
+              setMentionStart(start);
+              setMentionQuery(match[2]);
+              setShowMentions(true);
+              const coords = getCaretCoordinates(el, cursor);
+              const textRect = el.getBoundingClientRect();
+              setMentionPos({
+                top: textRect.top + coords.top + coords.height + 14,
+                left: textRect.left + coords.left,
+              });
+            } else {
+              setShowMentions(false);
+              setMentionQuery('');
+              setMentionStart(null);
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => setShowMentions(false), 100);
           }}
           className="w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-1 text-sm text-slate-700 focus:outline-none"
           placeholder="Write your markdown..."
@@ -497,28 +631,180 @@ export default function CardDetailPage() {
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_auto_1fr]">
           <div className="flex min-h-0 flex-col gap-4">
             {renderToolbar()}
-            <div className="flex-1 min-h-0 overflow-y-auto">{renderEditor()}</div>
+          <div className="relative flex-1 min-h-0 overflow-visible" ref={editorWrapRef}>
+            {renderEditor()}
+            {showMentions && (
+              <div
+                className="fixed z-50 w-72 max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg"
+                style={{ top: mentionPos.top, left: mentionPos.left }}
+                ref={mentionMenuRef}
+              >
+                  <div className="border-b border-slate-200 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                    Link card
+                  </div>
+                  <div className="max-h-52 overflow-y-auto p-2">
+                    {allCards
+                      .filter((item) => item.id !== card.id)
+                      .filter((item) =>
+                        mentionQuery ? item.title.toLowerCase().includes(mentionQuery.toLowerCase()) : true
+                      )
+                      .slice(0, 8)
+                      .map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            if (mentionStart === null) return;
+                            const before = content.slice(0, mentionStart);
+                            const after = content.slice(editorRef.current?.selectionStart ?? content.length);
+                            const token = `@[[${item.id}|${item.title}]]`;
+                            const next = `${before}${token} ${after}`;
+                            setContent(next);
+                            setShowMentions(false);
+                            setMentionQuery('');
+                            setMentionStart(null);
+                            requestAnimationFrame(() => {
+                              const el = editorRef.current;
+                              if (!el) return;
+                              const pos = before.length + token.length + 1;
+                              el.focus();
+                              el.selectionStart = pos;
+                              el.selectionEnd = pos;
+                            });
+                          }}
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="truncate">{item.title}</span>
+                          <span className="text-xs text-slate-400">#{item.id}</span>
+                        </button>
+                      ))}
+                    {allCards.filter((item) => item.id !== card.id).length === 0 && (
+                      <div className="px-3 py-2 text-xs text-slate-400">No cards available.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex justify-end text-xs text-slate-500">
               {isSaving ? 'Saving…' : 'Autosave on'}
             </div>
           </div>
           <div className="h-full w-px bg-slate-200" />
-          <article className="prose max-w-none min-h-0 overflow-y-auto px-0 py-1 text-sm leading-relaxed text-slate-700">
-            {renderMarkdown(content || 'No content yet.')}
-          </article>
+          <div className="flex min-h-0 flex-col gap-6">
+            <article className="prose max-w-none min-h-0 overflow-y-auto px-0 py-1 text-sm leading-relaxed text-slate-700">
+              {renderMarkdown(content || 'No content yet.')}
+            </article>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Linked cards
+              </div>
+              <div className="mt-3 space-y-2">
+                {linkedCards.length === 0 && (
+                  <div className="text-sm text-slate-500">No linked cards.</div>
+                )}
+                {linkedCards.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => router.push(`/cards/${item.id}`)}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <span className="truncate">@{item.title}</span>
+                    <span className="text-xs text-slate-400">#{item.id}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       ) : viewMode === 'edit' ? (
         <div className="flex min-h-0 flex-1 flex-col gap-4">
           {renderToolbar()}
-          <div className="flex-1 min-h-0 overflow-y-auto">{renderEditor()}</div>
+          <div className="relative flex-1 min-h-0 overflow-visible" ref={editorWrapRef}>
+            {renderEditor()}
+            {showMentions && (
+              <div
+                className="fixed z-50 w-72 max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg"
+                style={{ top: mentionPos.top, left: mentionPos.left }}
+                ref={mentionMenuRef}
+              >
+                <div className="border-b border-slate-200 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                  Link card
+                </div>
+                <div className="max-h-52 overflow-y-auto p-2">
+                  {allCards
+                    .filter((item) => item.id !== card.id)
+                    .filter((item) =>
+                      mentionQuery ? item.title.toLowerCase().includes(mentionQuery.toLowerCase()) : true
+                    )
+                    .slice(0, 8)
+                    .map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          if (mentionStart === null) return;
+                          const before = content.slice(0, mentionStart);
+                          const after = content.slice(editorRef.current?.selectionStart ?? content.length);
+                          const token = `@[[${item.id}|${item.title}]]`;
+                          const next = `${before}${token} ${after}`;
+                          setContent(next);
+                          setShowMentions(false);
+                          setMentionQuery('');
+                          setMentionStart(null);
+                          requestAnimationFrame(() => {
+                            const el = editorRef.current;
+                            if (!el) return;
+                            const pos = before.length + token.length + 1;
+                            el.focus();
+                            el.selectionStart = pos;
+                            el.selectionEnd = pos;
+                          });
+                        }}
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="truncate">{item.title}</span>
+                        <span className="text-xs text-slate-400">#{item.id}</span>
+                      </button>
+                    ))}
+                  {allCards.filter((item) => item.id !== card.id).length === 0 && (
+                    <div className="px-3 py-2 text-xs text-slate-400">No cards available.</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="flex justify-end text-xs text-slate-500">
             {isSaving ? 'Saving…' : 'Autosave on'}
           </div>
         </div>
       ) : (
-        <article className="prose max-w-none min-h-0 flex-1 overflow-y-auto text-sm leading-relaxed text-slate-700">
-          {renderMarkdown(content || 'No content yet.')}
-        </article>
+        <div className="flex min-h-0 flex-1 flex-col gap-6">
+          <article className="prose max-w-none min-h-0 overflow-y-auto text-sm leading-relaxed text-slate-700">
+            {renderMarkdown(content || 'No content yet.')}
+          </article>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Linked cards
+            </div>
+            <div className="mt-3 space-y-2">
+              {linkedCards.length === 0 && (
+                <div className="text-sm text-slate-500">No linked cards.</div>
+              )}
+              {linkedCards.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => router.push(`/cards/${item.id}`)}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <span className="truncate">@{item.title}</span>
+                  <span className="text-xs text-slate-400">#{item.id}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

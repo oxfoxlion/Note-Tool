@@ -45,14 +45,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       style={
         {
           background: 'var(--app-bg)',
-          '--sidebar-width': collapsed ? '4rem' : '16rem',
+          '--sidebar-width': collapsed ? '0rem' : '16rem',
         } as React.CSSProperties
       }
     >
-      <div className="flex min-h-screen">
+      <div className="relative flex min-h-screen">
         <aside
-          className={`shrink-0 transition-all duration-300 ${
-            collapsed ? 'w-16' : 'w-64'
+          className={`shrink-0 overflow-hidden transition-all duration-300 ${
+            collapsed ? 'w-0' : 'w-64'
           }`}
           style={{ background: 'var(--sidebar-bg)', color: 'var(--sidebar-fg)' }}
         >
@@ -116,8 +116,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </aside>
+        {collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="absolute left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md hover:bg-slate-50"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
         <main className="app-main flex-1">
-          <div className="px-6 py-8 md:px-10">{children}</div>
+          <div className={`py-8 ${collapsed ? 'pl-16 pr-6 md:pl-20 md:pr-10' : 'px-6 md:px-10'}`}>
+            {children}
+          </div>
         </main>
       </div>
     </div>

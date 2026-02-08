@@ -22,12 +22,15 @@ export type Card = {
   updated_at?: string;
   x_pos?: number;
   y_pos?: number;
+  width?: number | null;
+  height?: number | null;
 };
 
 export type Board = {
   id: number;
   user_id: string;
   name: string;
+  tags?: string[];
   created_at: string;
   card_count?: number;
 };
@@ -67,6 +70,15 @@ export async function createBoard(payload: { name: string }) {
   return data as Board;
 }
 
+export async function updateBoard(boardId: number, payload: { name: string; tags?: string[] }) {
+  const { data } = await api.put(`/note_tool/board/${boardId}`, payload, { headers: authHeaders() });
+  return data as Board;
+}
+
+export async function deleteBoard(boardId: number) {
+  await api.delete(`/note_tool/board/${boardId}`, { headers: authHeaders() });
+}
+
 export async function getBoard(boardId: number) {
   const { data } = await api.get(`/note_tool/board/${boardId}`, { headers: authHeaders() });
   return data as { board: Board; cards: Card[] };
@@ -79,11 +91,15 @@ export async function createCardInBoard(boardId: number, payload: { title: strin
   return data as { card: Card; boardCard: { board_id: number; card_id: number; x_pos: number; y_pos: number } };
 }
 
-export async function updateBoardCardPosition(boardId: number, cardId: number, payload: { x_pos: number; y_pos: number }) {
+export async function updateBoardCardPosition(
+  boardId: number,
+  cardId: number,
+  payload: { x_pos?: number | null; y_pos?: number | null; width?: number | null; height?: number | null }
+) {
   const { data } = await api.put(`/note_tool/board/${boardId}/cards/${cardId}`, payload, {
     headers: authHeaders(),
   });
-  return data as { board_id: number; card_id: number; x_pos: number; y_pos: number };
+  return data as { board_id: number; card_id: number; x_pos: number; y_pos: number; width?: number | null; height?: number | null };
 }
 
 export async function addExistingCardToBoard(boardId: number, cardId: number) {

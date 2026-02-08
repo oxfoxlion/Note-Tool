@@ -9,11 +9,13 @@ import {
   addExistingCardToBoard,
   Card,
   createCardInBoard,
+  deleteBoard,
   getBoard,
   getCards,
   getUserSettings,
   removeCardFromBoard,
   updateBoardCardPosition,
+  updateBoard,
   updateCard,
   updateUserSettings,
 } from '../../../../lib/noteToolApi';
@@ -23,7 +25,7 @@ export default function BoardDetailPage() {
   const router = useRouter();
   const boardId = Number(params.id);
   const [cards, setCards] = useState<Card[]>([]);
-  const [positions, setPositions] = useState<Record<number, { x: number; y: number }>>({});
+  const [positions, setPositions] = useState<Record<number, { x: number; y: number; width?: number | null }>>({});
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [boardName, setBoardName] = useState('');
   const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
@@ -38,8 +40,15 @@ export default function BoardDetailPage() {
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [showToolbar, setShowToolbar] = useState(false);
-  const [cardPreviewLength, setCardPreviewLength] = useState(120);
+  const [showBoardMenu, setShowBoardMenu] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [tagValue, setTagValue] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const defaultCardWidth = 420;
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const viewportRef = useRef(viewport);
   const [isPanning, setIsPanning] = useState(false);
@@ -51,6 +60,11 @@ export default function BoardDetailPage() {
     pointerX: number;
     pointerY: number;
   } | null>(null);
+  const resizeRef = useRef<{
+    id: number;
+    startWidth: number;
+    pointerX: number;
+  } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -61,20 +75,23 @@ export default function BoardDetailPage() {
           getUserSettings(),
         ]);
         setBoardName(boardData.board.name);
+        setRenameValue(boardData.board.name);
+        setTagValue((boardData.board.tags ?? []).join(', '));
         setCards(boardData.cards);
         setAllCards(cardsData);
-        const nextPositions: Record<number, { x: number; y: number }> = {};
+        const nextPositions: Record<number, { x: number; y: number; width?: number | null }> = {};
         boardData.cards.forEach((card) => {
           const x = typeof card.x_pos === 'number' ? card.x_pos : 0;
           const y = typeof card.y_pos === 'number' ? card.y_pos : 0;
-          nextPositions[card.id] = { x, y };
+          nextPositions[card.id] = {
+            x,
+            y,
+            width: typeof card.width === 'number' ? card.width : null,
+          };
         });
         setPositions(nextPositions);
         if (settingsData?.cardOpenMode) {
           setCardOpenMode(settingsData.cardOpenMode);
-        }
-        if (typeof settingsData?.cardPreviewLength === 'number') {
-          setCardPreviewLength(settingsData.cardPreviewLength);
         }
       } catch (err: any) {
         if (err?.message === 'NO_TOKEN') {
@@ -89,7 +106,7 @@ export default function BoardDetailPage() {
     }
   }, [boardId, router]);
 
-  const filteredCards = useMemo(() => {
+  const searchResults = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     if (!keyword) return cards;
     return cards.filter((card) => {
@@ -115,7 +132,10 @@ export default function BoardDetailPage() {
     setCards((prev) => [data.card, ...prev]);
     setPositions((prev) => ({
       ...prev,
-      [data.card.id]: spawnPoint ?? { x: 0, y: 0 },
+      [data.card.id]: {
+        ...(spawnPoint ?? { x: 0, y: 0 }),
+        width: null,
+      },
     }));
     setSpawnPoint(null);
   };
@@ -132,7 +152,11 @@ export default function BoardDetailPage() {
       selected.forEach((card, index) => {
         const offsetX = (index % 3) * 40;
         const offsetY = Math.floor(index / 3) * 40;
-        next[card.id] = { x: base.x + offsetX, y: base.y + offsetY };
+        next[card.id] = {
+          x: base.x + offsetX,
+          y: base.y + offsetY,
+          width: null,
+        };
       });
       return next;
     });
@@ -168,6 +192,10 @@ export default function BoardDetailPage() {
     const stage = stageRef.current;
     if (!stage) return;
     const handleWheel = (event: WheelEvent) => {
+      const target = event.target as HTMLElement;
+      if (event.shiftKey && target?.closest?.('[data-card=\"true\"]')) {
+        return;
+      }
       event.preventDefault();
       const rect = stage.getBoundingClientRect();
       const { x: offsetX, y: offsetY, scale } = viewportRef.current;
@@ -233,6 +261,7 @@ export default function BoardDetailPage() {
   const beginDrag = (event: React.PointerEvent<HTMLDivElement>, cardId: number) => {
     if (tool !== 'add') return;
     event.stopPropagation();
+    if (resizeRef.current) return;
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
     const pointerX = (event.clientX - rect.left - viewport.x) / viewport.scale;
@@ -260,6 +289,7 @@ export default function BoardDetailPage() {
     setPositions((prev) => ({
       ...prev,
       [dragging.id]: {
+        ...(prev[dragging.id] ?? { x: 0, y: 0 }),
         x: dragging.startX + dx,
         y: dragging.startY + dy,
       },
@@ -283,12 +313,107 @@ export default function BoardDetailPage() {
     }
   };
 
+  const startResize = (event: React.PointerEvent<HTMLDivElement>, cardId: number) => {
+    if (tool !== 'add') return;
+    event.stopPropagation();
+    const el = cardRefs.current[cardId];
+    if (!el) return;
+    resizeRef.current = {
+      id: cardId,
+      startWidth: el.offsetWidth,
+      pointerX: event.clientX,
+    };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const applyResize = (clientX: number) => {
+    const resizing = resizeRef.current;
+    if (!resizing) return;
+    const scale = viewportRef.current.scale || 1;
+    const dx = (clientX - resizing.pointerX) / scale;
+    const nextWidth = Math.max(320, Math.round(resizing.startWidth + dx));
+    setPositions((prev) => ({
+      ...prev,
+      [resizing.id]: {
+        ...(prev[resizing.id] ?? { x: 0, y: 0 }),
+        width: nextWidth,
+      },
+    }));
+  };
+
+  const endResize = (event?: React.PointerEvent<HTMLDivElement>) => {
+    const resizing = resizeRef.current;
+    resizeRef.current = null;
+    if (!resizing) return;
+    const pos = positions[resizing.id];
+    if (!pos) return;
+    updateBoardCardPosition(boardId, resizing.id, {
+      width: pos.width ?? null,
+    }).catch(() => {
+      setError('Failed to save card size.');
+    });
+    if (event) {
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    }
+  };
+
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
     setCardOpenMode(mode);
     try {
       await updateUserSettings({ cardOpenMode: mode });
     } catch (err) {
       setError('Failed to update view mode.');
+    }
+  };
+
+  const focusCard = (cardId: number) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const pos = positions[cardId];
+    if (!pos) return;
+    const width = pos.width ?? defaultCardWidth;
+    const cardCenterX = pos.x + width / 2;
+    const cardCenterY = pos.y + (cardRefs.current[cardId]?.offsetHeight ?? 160) / 2;
+    const scale = viewportRef.current.scale;
+    const nextX = rect.width / 2 - cardCenterX * scale;
+    const nextY = rect.height / 2 - cardCenterY * scale;
+    setViewport({ x: nextX, y: nextY, scale });
+  };
+
+  const handleRenameBoard = async () => {
+    if (!renameValue.trim()) {
+      setError('Board name is required.');
+      return;
+    }
+    try {
+      setError('');
+      const tags = tagValue
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
+      const updated = await updateBoard(boardId, { name: renameValue.trim(), tags });
+      setBoardName(updated.name);
+      setShowRename(false);
+      setShowBoardMenu(false);
+    } catch (err: any) {
+      if (err?.message === 'NO_TOKEN') {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to update board.');
+    }
+  };
+
+  const handleDeleteBoard = async () => {
+    try {
+      await deleteBoard(boardId);
+      router.push('/boards');
+    } catch (err: any) {
+      if (err?.message === 'NO_TOKEN') {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to delete board.');
     }
   };
 
@@ -303,7 +428,73 @@ export default function BoardDetailPage() {
 
         <div className="absolute right-6 top-6 z-30 flex flex-col items-end gap-4">
           <div className="flex w-72 flex-col gap-3">
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-1">
+              {showSearch && (
+                <div className="relative">
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search in board..."
+                    className="w-56 rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                  {query.trim() && (
+                    <div className="pointer-events-auto absolute left-0 top-12 z-40 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
+                      <div className="border-b border-slate-200 px-4 py-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                          Search Results
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {searchResults.length} cards
+                        </div>
+                      </div>
+                      <div className="max-h-[55vh] overflow-y-auto p-3">
+                        <div className="grid gap-2">
+                          {searchResults.map((card) => (
+                            <button
+                              key={card.id}
+                              type="button"
+                              onClick={() => focusCard(card.id)}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-left text-sm text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                            >
+                              <div className="text-sm font-semibold text-slate-900">{card.title}</div>
+                              <div className="mt-2 text-xs text-slate-600">
+                                {(card.content ?? '').slice(0, 80) || 'No content yet.'}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        {searchResults.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-500">
+                            No cards found.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowSearch((prev) => {
+                      const next = !prev;
+                      if (!next) {
+                        setQuery('');
+                      }
+                      return next;
+                    })
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+                  aria-label="Search"
+                  title="Search"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                    <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
               <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
                 <button
                   type="button"
@@ -333,16 +524,48 @@ export default function BoardDetailPage() {
                   </svg>
                 </button>
               </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowBoardMenu((prev) => !prev)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+                  aria-label="Board menu"
+                  title="Board menu"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+                    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                    <circle cx="18" cy="12" r="1.5" fill="currentColor" />
+                  </svg>
+                </button>
+                {showBoardMenu && (
+                  <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRename(true);
+                        setShowBoardMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Edit details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDeleteConfirm(true);
+                        setShowBoardMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search in board..."
-              className="rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-slate-300"
-            />
             {error && <div className="text-xs text-rose-600">{error}</div>}
           </div>
-
         </div>
 
         <div className="absolute bottom-6 right-6 z-30 flex flex-col items-end gap-3">
@@ -352,23 +575,43 @@ export default function BoardDetailPage() {
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setTool('pan')}
-                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full text-slate-700 ${
-                  tool === 'pan' ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'
+                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
+                  tool === 'pan'
+                    ? 'border border-slate-200 bg-slate-100 text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-100'
                 } ${tool === 'pan' ? 'tool-active' : ''}`}
                 title="Pan"
               >
-                ✋
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M2.5 12c2.2-4.2 6.6-7 9.5-7s7.3 2.8 9.5 7c-2.2 4.2-6.6 7-9.5 7s-7.3-2.8-9.5-7z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                  />
+                  <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
               </button>
               <button
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setTool('add')}
-                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full text-slate-700 ${
-                  tool === 'add' ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'
+                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
+                  tool === 'add'
+                    ? 'border border-slate-200 bg-slate-100 text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-100'
                 } ${tool === 'add' ? 'tool-active' : ''}`}
-                title="Add"
+                title="Edit"
               >
-                +
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                  />
+                  <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
               </button>
               <div className="h-px w-6 bg-slate-200" />
               <div className="tool-zoom flex flex-col items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 p-3">
@@ -461,24 +704,69 @@ export default function BoardDetailPage() {
               transformOrigin: '0 0',
             }}
           >
-            {filteredCards.map((card) => {
+            {cards.map((card) => {
               const pos = positions[card.id] || { x: 0, y: 0 };
               return (
                 <div
                   key={card.id}
                   data-card="true"
+                  onWheel={(event) => {
+                    if (event.shiftKey) {
+                      event.stopPropagation();
+                    }
+                  }}
                   onPointerDown={(event) => beginDrag(event, card.id)}
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
                   onDoubleClick={() => setSelectedCard(card)}
-                  className="absolute w-64 cursor-grab select-none"
-                  style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+                  className={`absolute select-none ${tool === 'add' ? 'cursor-grab' : 'cursor-default'}`}
+                  style={{
+                    transform: `translate(${pos.x}px, ${pos.y}px)`,
+                    width: pos.width ?? defaultCardWidth,
+                    height: undefined,
+                  }}
+                  ref={(el) => {
+                    cardRefs.current[card.id] = el;
+                  }}
                 >
-                  <CardPreview
-                    card={card}
-                    previewLength={cardPreviewLength}
-                    onSelect={() => setSelectedCard(card)}
-                  />
+                  <div className="relative">
+                    <CardPreview
+                      card={card}
+                      renderMarkdown
+                      interactive={false}
+                      fillHeight={false}
+                      onSelect={() => {}}
+                    />
+                    <button
+                      type="button"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedCard(card);
+                      }}
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm hover:bg-slate-100"
+                      title="Open card"
+                      aria-label="Open card"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                        <path
+                          d="M7 3H3v4M21 7V3h-4M3 17v4h4M17 21h4v-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                        />
+                      </svg>
+                    </button>
+                    {tool === 'add' && (
+                      <div
+                        onPointerDown={(event) => startResize(event, card.id)}
+                        onPointerMove={(event) => applyResize(event.clientX)}
+                        onPointerUp={(event) => endResize(event)}
+                        className="absolute right-0 top-2 h-[calc(100%-16px)] w-2 cursor-ew-resize"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -493,6 +781,7 @@ export default function BoardDetailPage() {
           onClose={() => setSelectedCard(null)}
           onSave={handleSave}
           onRemoveFromBoard={handleRemoveFromBoard}
+          allCards={allCards}
         />
       )}
 
@@ -550,6 +839,7 @@ export default function BoardDetailPage() {
           mode={cardOpenMode}
           onClose={() => setShowCreate(false)}
           onCreate={handleCreate}
+          allCards={allCards}
         />
       )}
 
@@ -567,9 +857,13 @@ export default function BoardDetailPage() {
                   setShowImport(false);
                   setSelectedImportIds(new Set());
                 }}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+                aria-label="Close"
+                title="Close"
               >
-                Close
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
               </button>
             </div>
             <div className="space-y-4 px-6 py-5">
@@ -634,6 +928,75 @@ export default function BoardDetailPage() {
                   Import selected
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRename && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Edit board</div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">Update details</h3>
+            <input
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              placeholder="Board name"
+              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            <input
+              value={tagValue}
+              onChange={(event) => setTagValue(event.target.value)}
+              placeholder="Tags (comma separated)"
+              className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRename(false);
+                  setError('');
+                }}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRenameBoard}
+                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete board</div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
+            <p className="mt-3 text-sm text-slate-600">
+              This will remove the board and its layout. Cards remain in your card box.
+            </p>
+            <div className="mt-5 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteBoard}
+                className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

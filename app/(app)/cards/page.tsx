@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardCreateOverlay from '../../../components/CardCreateOverlay';
@@ -24,12 +24,27 @@ export default function CardsPage() {
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
   const [query, setQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
   const [boardFilter, setBoardFilter] = useState<string>('');
   const [error, setError] = useState('');
   const [cardPreviewLength, setCardPreviewLength] = useState(120);
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const filterRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showFilterMenu) return;
+    const handleClick = (event: MouseEvent) => {
+      if (!filterRef.current) return;
+      if (!filterRef.current.contains(event.target as Node)) {
+        setShowFilterMenu(false);
+      }
+    };
+    window.addEventListener('mousedown', handleClick);
+    return () => window.removeEventListener('mousedown', handleClick);
+  }, [showFilterMenu]);
 
   useEffect(() => {
     const load = async () => {
@@ -117,6 +132,9 @@ export default function CardsPage() {
     ? boards.find((board) => String(board.id) === boardFilter)?.name || 'Selected board'
     : 'All cards';
 
+  const boardFilterLabel =
+    boards.find((board) => String(board.id) === boardFilter)?.name || 'All boards';
+
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
     setCardOpenMode(mode);
     try {
@@ -131,9 +149,39 @@ export default function CardsPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Card Box</div>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">{boardTitle}</h1>
+          <div className="mt-2 min-h-[20px] text-sm font-semibold text-slate-700">
+            {boardFilter ? `Card Box / ${boardTitle}` : ''}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          {showSearch && (
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search cards..."
+              className="w-56 rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              setShowSearch((prev) => {
+                const next = !prev;
+                if (!next) {
+                  setQuery('');
+                }
+                return next;
+              })
+            }
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+            aria-label="Search"
+            title="Search"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+              <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+              <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
           <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
             <button
               type="button"
@@ -163,24 +211,53 @@ export default function CardsPage() {
               </svg>
             </button>
           </div>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search cards..."
-            className="w-56 rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
-          />
-          <select
-            value={boardFilter}
-            onChange={(event) => setBoardFilter(event.target.value)}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
-          >
-            <option value="">All boards</option>
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.name}
-              </option>
-            ))}
-          </select>
+          <div className="relative ml-2" ref={filterRef}>
+            <button
+              type="button"
+              onClick={() => setShowFilterMenu((prev) => !prev)}
+              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
+              aria-label="Filter by board"
+              title="Filter by board"
+            >
+              <span>{boardFilterLabel}</span>
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+              </svg>
+            </button>
+            {showFilterMenu && (
+              <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBoardFilter('');
+                    setShowFilterMenu(false);
+                  }}
+                  className={`w-full px-4 py-2 text-left text-sm ${
+                    boardFilter === '' ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  All boards
+                </button>
+                {boards.map((board) => (
+                  <button
+                    key={board.id}
+                    type="button"
+                    onClick={() => {
+                      setBoardFilter(String(board.id));
+                      setShowFilterMenu(false);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm ${
+                      String(board.id) === boardFilter
+                        ? 'bg-slate-100 text-slate-900'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {board.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -191,7 +268,7 @@ export default function CardsPage() {
           <CardPreview
             key={card.id}
             card={card}
-            previewLength={cardPreviewLength}
+            previewLength={50}
             onSelect={() => setSelectedCard(card)}
           />
         ))}
@@ -204,6 +281,7 @@ export default function CardsPage() {
           onClose={() => setSelectedCard(null)}
           onSave={handleSave}
           onDelete={handleDelete}
+          allCards={allCards}
         />
       )}
 
@@ -212,6 +290,7 @@ export default function CardsPage() {
           mode={cardOpenMode}
           onClose={() => setShowCreate(false)}
           onCreate={handleCreate}
+          allCards={allCards}
         />
       )}
 

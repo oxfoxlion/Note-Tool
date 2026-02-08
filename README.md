@@ -47,3 +47,5 @@ See `note_tool/docs/work_log_2026-02-08.md`.
 
 - 需設定 `NEXT_PUBLIC_API_BASE` 才能登入與呼叫後端。
 - 使用 `react-markdown` + `remark-gfm`，支援表格/核取方塊等語法。
+- 支援卡片 @ mentions 建立關聯（可點連結 + Linked cards 區塊）。
+- 支援白板 tags（白板編輯與 Boards 篩選）。

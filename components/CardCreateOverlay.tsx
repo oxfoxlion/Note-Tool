@@ -6,20 +6,30 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
+import type { Card } from '../lib/noteToolApi';
 
 type CardCreateOverlayProps = {
   mode: 'modal' | 'sidepanel';
   onClose: () => void;
   onCreate: (payload: { title: string; content: string }) => Promise<void> | void;
+  allCards?: Card[];
 };
 
-export default function CardCreateOverlay({ mode, onClose, onCreate }: CardCreateOverlayProps) {
+export default function CardCreateOverlay({
+  mode,
+  onClose,
+  onCreate,
+  allCards = [],
+}: CardCreateOverlayProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [showMentions, setShowMentions] = useState(false);
 
   const wrapSelection = (before: string, after: string = before) => {
     const el = editorRef.current;
@@ -106,6 +116,9 @@ export default function CardCreateOverlay({ mode, onClose, onCreate }: CardCreat
     setContent(lines.join('\n'));
   };
 
+  const prepareMarkdown = (text: string) =>
+    text.replace(/@\[\[(\d+)\|([^\]]+)\]\]/g, '[@$2](/cards/$1)');
+
   const renderMarkdown = (text: string) => {
     const taskLines = text
       .split('\n')
@@ -137,7 +150,7 @@ export default function CardCreateOverlay({ mode, onClose, onCreate }: CardCreat
           },
         }}
       >
-        {text}
+        {prepareMarkdown(text)}
       </ReactMarkdown>
     );
   };
@@ -317,7 +330,24 @@ export default function CardCreateOverlay({ mode, onClose, onCreate }: CardCreat
             const el = event.currentTarget;
             el.style.height = 'auto';
             el.style.height = `${el.scrollHeight}px`;
-            setContent(event.target.value);
+            const nextValue = event.target.value;
+            setContent(nextValue);
+            const cursor = el.selectionStart ?? nextValue.length;
+            const before = nextValue.slice(0, cursor);
+            const match = before.match(/(^|\s)@([^\s@]*)$/);
+            if (match) {
+              const start = cursor - match[2].length - 1;
+              setMentionStart(start);
+              setMentionQuery(match[2]);
+              setShowMentions(true);
+            } else {
+              setShowMentions(false);
+              setMentionQuery('');
+              setMentionStart(null);
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => setShowMentions(false), 100);
           }}
           className="w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-1 text-sm text-slate-700 focus:outline-none"
           placeholder="Write your markdown..."
@@ -429,19 +459,23 @@ export default function CardCreateOverlay({ mode, onClose, onCreate }: CardCreat
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+              aria-label="Close"
+              title="Close"
             >
-              Close
+              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
             </button>
           </div>
         </div>
-        <div className="space-y-4 px-6 py-5">
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
-            placeholder="Card title"
-          />
+          <div className="space-y-4 px-6 py-5">
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              placeholder="Card title"
+            />
           {viewMode === 'preview' ? (
             <article className="prose max-w-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
               {renderMarkdown(content || 'No content yet.')}
@@ -449,7 +483,56 @@ export default function CardCreateOverlay({ mode, onClose, onCreate }: CardCreat
           ) : (
             <div className="space-y-4">
               {renderToolbar()}
-              <div className="flex-1 min-h-0 overflow-y-auto">{renderEditor()}</div>
+              <div className="relative flex-1 min-h-0 overflow-visible">
+                {renderEditor()}
+                {showMentions && (
+                  <div className="absolute z-50 mt-2 w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg">
+                    <div className="border-b border-slate-200 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                      Link card
+                    </div>
+                    <div className="max-h-52 overflow-y-auto p-2">
+                      {allCards
+                        .filter((item) => item.title)
+                        .filter((item) =>
+                          mentionQuery ? item.title.toLowerCase().includes(mentionQuery.toLowerCase()) : true
+                        )
+                        .slice(0, 8)
+                        .map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              if (mentionStart === null) return;
+                              const before = content.slice(0, mentionStart);
+                              const after = content.slice(editorRef.current?.selectionStart ?? content.length);
+                              const token = `@[[${item.id}|${item.title}]]`;
+                              const next = `${before}${token} ${after}`;
+                              setContent(next);
+                              setShowMentions(false);
+                              setMentionQuery('');
+                              setMentionStart(null);
+                              requestAnimationFrame(() => {
+                                const el = editorRef.current;
+                                if (!el) return;
+                                const pos = before.length + token.length + 1;
+                                el.focus();
+                                el.selectionStart = pos;
+                                el.selectionEnd = pos;
+                              });
+                            }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <span className="truncate">{item.title}</span>
+                            <span className="text-xs text-slate-400">#{item.id}</span>
+                          </button>
+                        ))}
+                      {allCards.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-400">No cards available.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <div className="flex items-center justify-between">

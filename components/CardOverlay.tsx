@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -16,6 +16,7 @@ type CardOverlayProps = {
   onSave: (next: { title: string; content: string }) => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
   onRemoveFromBoard?: () => Promise<void> | void;
+  allCards?: Card[];
 };
 
 export default function CardOverlay({
@@ -25,6 +26,7 @@ export default function CardOverlay({
   onSave,
   onDelete,
   onRemoveFromBoard,
+  allCards = [],
 }: CardOverlayProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'view' | 'edit'>('view');
@@ -39,12 +41,18 @@ export default function CardOverlay({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [showMentions, setShowMentions] = useState(false);
 
   useEffect(() => {
     setTitle(card.title);
     setContent(card.content ?? '');
     setViewMode('view');
     lastSavedRef.current = { title: card.title, content: card.content ?? '' };
+    setShowMentions(false);
+    setMentionQuery('');
+    setMentionStart(null);
   }, [card.id]);
 
   useEffect(() => {
@@ -97,6 +105,41 @@ export default function CardOverlay({
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   }, [content, viewMode]);
+
+  const cardMap = useMemo(() => {
+    const map = new Map<number, Card>();
+    allCards.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [allCards]);
+
+  const mentionedIds = useMemo(() => {
+    const ids = new Set<number>();
+    const regex = /@\[\[(\d+)\|[^\]]+\]\]/g;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content))) {
+      ids.add(Number(match[1]));
+    }
+    return Array.from(ids);
+  }, [content]);
+
+  const incomingIds = useMemo(() => {
+    const ids = new Set<number>();
+    const regex = new RegExp(`@\\[\\[${card.id}\\|[^\\]]+\\]\\]`, 'g');
+    allCards.forEach((item) => {
+      if (item.id === card.id || !item.content) return;
+      if (regex.test(item.content)) {
+        ids.add(item.id);
+      }
+    });
+    return Array.from(ids);
+  }, [allCards, card.id]);
+
+  const linkedCards = Array.from(new Set([...mentionedIds, ...incomingIds]))
+    .map((id) => cardMap.get(id))
+    .filter((item): item is Card => Boolean(item));
+
+  const prepareMarkdown = (text: string) =>
+    text.replace(/@\[\[(\d+)\|([^\]]+)\]\]/g, '[@$2](/cards/$1)');
 
   const wrapSelection = (before: string, after: string = before) => {
     const el = editorRef.current;
@@ -217,7 +260,7 @@ export default function CardOverlay({
           },
         }}
       >
-        {text}
+        {prepareMarkdown(text)}
       </ReactMarkdown>
     );
   };
@@ -397,7 +440,24 @@ export default function CardOverlay({
             const el = event.currentTarget;
             el.style.height = 'auto';
             el.style.height = `${el.scrollHeight}px`;
-            setContent(event.target.value);
+            const nextValue = event.target.value;
+            setContent(nextValue);
+            const cursor = el.selectionStart ?? nextValue.length;
+            const before = nextValue.slice(0, cursor);
+            const match = before.match(/(^|\s)@([^\s@]*)$/);
+            if (match) {
+              const start = cursor - match[2].length - 1;
+              setMentionStart(start);
+              setMentionQuery(match[2]);
+              setShowMentions(true);
+            } else {
+              setShowMentions(false);
+              setMentionQuery('');
+              setMentionStart(null);
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => setShowMentions(false), 100);
           }}
           className="w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-1 text-sm text-slate-700 focus:outline-none"
           placeholder="Write your markdown..."
@@ -505,17 +565,25 @@ export default function CardOverlay({
               <button
                 type="button"
                 onClick={() => setShowRemoveConfirm(true)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+                aria-label="Remove from board"
+                title="Remove from board"
               >
-                Remove from board
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path d="M4 12h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+              aria-label="Close"
+              title="Close"
             >
-              Close
+              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
             </button>
           </div>
         </div>
@@ -529,15 +597,92 @@ export default function CardOverlay({
                 placeholder="Card title"
               />
               {renderToolbar()}
-              <div className="flex-1 min-h-0 overflow-y-auto">{renderEditor()}</div>
+              <div className="relative flex-1 min-h-0 overflow-visible">
+                {renderEditor()}
+                {showMentions && (
+                  <div className="absolute z-50 mt-2 w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg">
+                    <div className="border-b border-slate-200 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                      Link card
+                    </div>
+                    <div className="max-h-52 overflow-y-auto p-2">
+                      {allCards
+                        .filter((item) => item.id !== card.id)
+                        .filter((item) =>
+                          mentionQuery
+                            ? item.title.toLowerCase().includes(mentionQuery.toLowerCase())
+                            : true
+                        )
+                        .slice(0, 8)
+                        .map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              if (mentionStart === null) return;
+                              const before = content.slice(0, mentionStart);
+                              const after = content.slice(editorRef.current?.selectionStart ?? content.length);
+                              const token = `@[[${item.id}|${item.title}]]`;
+                              const next = `${before}${token} ${after}`;
+                              setContent(next);
+                              setShowMentions(false);
+                              setMentionQuery('');
+                              setMentionStart(null);
+                              requestAnimationFrame(() => {
+                                const el = editorRef.current;
+                                if (!el) return;
+                                const pos = before.length + token.length + 1;
+                                el.focus();
+                                el.selectionStart = pos;
+                                el.selectionEnd = pos;
+                              });
+                            }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                          >
+                            <span className="truncate">{item.title}</span>
+                            <span className="text-xs text-slate-400">#{item.id}</span>
+                          </button>
+                        ))}
+                      {allCards.filter((item) => item.id !== card.id).length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-400">No cards available.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="flex justify-end text-xs text-slate-500">
                 {isSaving ? 'Saving…' : 'Autosave on'}
               </div>
             </div>
           ) : (
-            <article className="prose max-w-none text-sm leading-relaxed text-slate-700">
-              {renderMarkdown(content || 'No content yet.')}
-            </article>
+            <div className="space-y-6">
+              <article className="prose max-w-none text-sm leading-relaxed text-slate-700">
+                {renderMarkdown(content || 'No content yet.')}
+              </article>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Linked cards
+                </div>
+                <div className="mt-3 space-y-2">
+                  {linkedCards.length === 0 && (
+                    <div className="text-sm text-slate-500">No linked cards.</div>
+                  )}
+                  {linkedCards.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        router.push(`/cards/${item.id}`);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      <span className="truncate">@{item.title}</span>
+                      <span className="text-xs text-slate-400">#{item.id}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
