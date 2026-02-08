@@ -20,6 +20,27 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Design Doc
+
+See `note_tool/docs/SDD.md`.
+
+## Backend API
+
+本專案需要連到 `LineLanguageBot` 後端：
+
+1. 先啟動後端（建議用 `PORT=3001`）
+2. 前端設定 API Base URL
+
+在 `note_tool` 根目錄新增 `.env.local`：
+
+```env
+NEXT_PUBLIC_API_BASE=http://localhost:3001
+```
+
+## Work Log
+
+See `note_tool/docs/work_log_2026-02-08.md`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
