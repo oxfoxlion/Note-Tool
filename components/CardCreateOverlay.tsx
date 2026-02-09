@@ -381,9 +381,15 @@ export default function CardCreateOverlay({
   useEffect(() => {
     if (mode !== 'sidepanel') return;
     const root = document.getElementById('app-root') ?? document.documentElement;
+    const media = window.matchMedia('(max-width: 1024px)');
+    const applyWidth = () => {
+      (root as HTMLElement).style.setProperty('--sidepanel-width', media.matches ? '0px' : '36rem');
+    };
     root.classList.add('has-sidepanel');
-    (root as HTMLElement).style.setProperty('--sidepanel-width', '36rem');
+    applyWidth();
+    media.addEventListener('change', applyWidth);
     return () => {
+      media.removeEventListener('change', applyWidth);
       root.classList.remove('has-sidepanel');
       (root as HTMLElement).style.removeProperty('--sidepanel-width');
     };

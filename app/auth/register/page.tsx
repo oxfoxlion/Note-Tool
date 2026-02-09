@@ -29,12 +29,16 @@ export default function RegisterPage() {
     }
 
     try {
-      const response = await axios.post(`${API_BASE}/note_tool/auth/register`, {
-        id,
-        email,
-        displayName,
-        password,
-      });
+      const response = await axios.post(
+        `${API_BASE}/note_tool/auth/register`,
+        {
+          id,
+          email,
+          displayName,
+          password,
+        },
+        { withCredentials: true }
+      );
 
       if (response.status >= 200 && response.status < 300) {
         setMessage(response.data.message || 'Registration successful! Redirecting to login...');
@@ -55,7 +59,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
         <h1 className="text-2xl font-bold text-center text-gray-900">Register</h1>
         <form className="space-y-6" onSubmit={handleSubmit}>

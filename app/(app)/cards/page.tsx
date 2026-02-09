@@ -20,6 +20,7 @@ import {
 
 export default function CardsPage() {
   const router = useRouter();
+  const [isMobile, setIsMobile] = useState(false);
   const [cards, setCards] = useState<Card[]>([]);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
@@ -33,6 +34,14 @@ export default function CardsPage() {
   const [cardPreviewLength, setCardPreviewLength] = useState(120);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const filterRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const handleChange = () => setIsMobile(media.matches);
+    handleChange();
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     if (!showFilterMenu) return;
@@ -64,7 +73,7 @@ export default function CardsPage() {
           setCardPreviewLength(settingsData.cardPreviewLength);
         }
       } catch (err: any) {
-        if (err?.message === 'NO_TOKEN') {
+        if (err?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
           return;
         }
@@ -136,6 +145,7 @@ export default function CardsPage() {
     boards.find((board) => String(board.id) === boardFilter)?.name || 'All boards';
 
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
+    if (isMobile) return;
     setCardOpenMode(mode);
     try {
       await updateUserSettings({ cardOpenMode: mode });
@@ -153,13 +163,13 @@ export default function CardsPage() {
             {boardFilter ? `Card Box / ${boardTitle}` : ''}
           </div>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1">
+        <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
           {showSearch && (
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search cards..."
-              className="w-56 rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="min-w-0 rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 w-[34vw] max-w-[10rem] sm:w-56"
             />
           )}
           <button
@@ -182,44 +192,64 @@ export default function CardsPage() {
               <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           </button>
-          <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-            <button
-              type="button"
-              onClick={() => handleOpenModeChange('modal')}
-              className={`rounded-full p-2 ${
-                cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              title="Open in modal"
-              aria-label="Open in modal"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOpenModeChange('sidepanel')}
-              className={`rounded-full p-2 ${
-                cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              title="Open in side panel"
-              aria-label="Open in side panel"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
-                <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
-              </svg>
-            </button>
-          </div>
-          <div className="relative ml-2" ref={filterRef}>
+          {!isMobile && (
+            <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => handleOpenModeChange('modal')}
+                className={`rounded-full p-2 ${
+                  cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                title="Open in modal"
+                aria-label="Open in modal"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <rect
+                    x="5"
+                    y="6"
+                    width="14"
+                    height="12"
+                    rx="1.6"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    fill="none"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenModeChange('sidepanel')}
+                className={`rounded-full p-2 ${
+                  cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                title="Open in side panel"
+                aria-label="Open in side panel"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <rect
+                    x="4"
+                    y="6"
+                    width="16"
+                    height="12"
+                    rx="1.6"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    fill="none"
+                  />
+                  <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
+              </button>
+            </div>
+          )}
+          <div className="relative w-auto" ref={filterRef}>
             <button
               type="button"
               onClick={() => setShowFilterMenu((prev) => !prev)}
-              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
+              className="flex max-w-[8.5rem] items-center gap-2 truncate rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 sm:max-w-none sm:px-4"
               aria-label="Filter by board"
               title="Filter by board"
             >
-              <span>{boardFilterLabel}</span>
+              <span className="truncate">{boardFilterLabel}</span>
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true">
                 <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
               </svg>
@@ -269,7 +299,13 @@ export default function CardsPage() {
             key={card.id}
             card={card}
             previewLength={50}
-            onSelect={() => setSelectedCard(card)}
+            onSelect={() => {
+              if (isMobile) {
+                router.push(`/cards/${card.id}`);
+                return;
+              }
+              setSelectedCard(card);
+            }}
           />
         ))}
       </section>
@@ -296,7 +332,13 @@ export default function CardsPage() {
 
       <button
         type="button"
-        onClick={() => setShowCreate(true)}
+        onClick={() => {
+          if (isMobile) {
+            router.push('/cards/new');
+            return;
+          }
+          setShowCreate(true);
+        }}
         className="fixed bottom-8 right-8 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-2xl font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
         aria-label="Create card"
       >

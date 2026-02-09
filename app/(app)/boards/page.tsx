@@ -18,6 +18,7 @@ export default function BoardsPage() {
   const [query, setQuery] = useState('');
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [showTagMenu, setShowTagMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export default function BoardsPage() {
         const data = await getBoards();
         setBoards(data);
       } catch (err: any) {
-        if (err?.message === 'NO_TOKEN') {
+        if (err?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
           return;
         }
@@ -86,7 +87,7 @@ export default function BoardsPage() {
       );
       setEditingBoard(null);
     } catch (err: any) {
-      if (err?.message === 'NO_TOKEN') {
+      if (err?.message === 'UNAUTHORIZED') {
         router.push('/auth/login');
         return;
       }
@@ -102,7 +103,7 @@ export default function BoardsPage() {
       setBoards((prev) => prev.filter((item) => item.id !== deletingBoard.id));
       setDeletingBoard(null);
     } catch (err: any) {
-      if (err?.message === 'NO_TOKEN') {
+      if (err?.message === 'UNAUTHORIZED') {
         router.push('/auth/login');
         return;
       }
@@ -138,24 +139,46 @@ export default function BoardsPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-center justify-between gap-4">
+      <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Boards</div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search boards..."
-            className="w-56 rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
-          />
-          <div className="relative" ref={tagMenuRef}>
+        <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
+          {showSearch && (
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search boards..."
+              className="min-w-0 rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 w-[34vw] max-w-[10rem] sm:w-56"
+            />
+          )}
+          <button
+            type="button"
+            onClick={() =>
+              setShowSearch((prev) => {
+                const next = !prev;
+                if (!next) {
+                  setQuery('');
+                }
+                return next;
+              })
+            }
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+            aria-label="Search"
+            title="Search"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+              <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+              <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+          <div className="relative w-auto" ref={tagMenuRef}>
             <button
               type="button"
               onClick={() => setShowTagMenu((prev) => !prev)}
-              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50"
+              className="flex max-w-[8.5rem] items-center gap-2 truncate rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 sm:max-w-none sm:px-4"
               aria-label="Filter by tags"
               title="Filter by tags"
             >
-              <span>{tagLabel}</span>
+              <span className="truncate">{tagLabel}</span>
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true">
                 <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
               </svg>

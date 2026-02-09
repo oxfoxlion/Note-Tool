@@ -7,31 +7,33 @@ import Link from 'next/link';
 
 export default function Setup2FAPage() {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const [authAppUrl, setAuthAppUrl] = useState('');
+  const [copyMessage, setCopyMessage] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
 
   useEffect(() => {
     const setup2FA = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setMessage('You are not logged in.');
-        setMessageType('error');
-        return;
-      }
-
       try {
         const response = await axios.post(
           `${API_BASE}/note_tool/auth/2fa/setup`,
           {},
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            withCredentials: true,
           }
         );
 
         if (response.data.qrCodeUrl) {
-          setQrCodeUrl(response.data.qrCodeUrl);
+          const nextQrCodeUrl = response.data.qrCodeUrl;
+          const nextAuthAppUrl =
+            response.data.otpauthUrl || response.data.authAppUrl || response.data.setupUrl || '';
+
+          setQrCodeUrl(nextQrCodeUrl);
+          if (nextAuthAppUrl) {
+            setAuthAppUrl(nextAuthAppUrl);
+          } else if (typeof nextQrCodeUrl === 'string' && nextQrCodeUrl.startsWith('otpauth://')) {
+            setAuthAppUrl(nextQrCodeUrl);
+          }
           setMessage('Scan this QR code with your authenticator app.');
           setMessageType('success');
           if (response.data.userId) {
@@ -44,6 +46,11 @@ export default function Setup2FAPage() {
         setMessageType('error');
       } catch (error: any) {
         console.error('2FA Setup error:', error);
+        if (error?.response?.status === 401) {
+          setMessage('You are not logged in.');
+          setMessageType('error');
+          return;
+        }
         const errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
         setMessage(errorMessage);
         setMessageType('error');
@@ -53,8 +60,20 @@ export default function Setup2FAPage() {
     setup2FA();
   }, []);
 
+  const handleCopy = async () => {
+    if (!authAppUrl) return;
+    try {
+      await navigator.clipboard.writeText(authAppUrl);
+      setCopyMessage('Link copied.');
+    } catch (error) {
+      console.error('Copy failed:', error);
+      setCopyMessage('Copy failed. Please copy manually.');
+    }
+    setTimeout(() => setCopyMessage(''), 2000);
+  };
+
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
       <div className="w-full max-w-md p-8 space-y-6 text-center bg-white rounded-lg shadow-md">
         <h1 className="text-2xl font-bold text-gray-900">Set Up Two-Factor Authentication</h1>
         {message && (
@@ -68,7 +87,25 @@ export default function Setup2FAPage() {
         )}
         {qrCodeUrl && (
           <div className="flex justify-center">
-            <img src={qrCodeUrl} alt="2FA QR Code" />
+            <img src={qrCodeUrl} alt="2FA QR Code" className="h-auto w-52 max-w-full sm:w-64" />
+          </div>
+        )}
+        {authAppUrl && (
+          <div className="flex flex-col items-center gap-2">
+            <a
+              href={authAppUrl}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+            >
+              Open Authenticator App
+            </a>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200"
+            >
+              Copy setup link
+            </button>
+            {copyMessage && <div className="text-xs text-gray-600">{copyMessage}</div>}
           </div>
         )}
         <p className="text-sm text-gray-600">

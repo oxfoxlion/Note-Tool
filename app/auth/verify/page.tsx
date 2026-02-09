@@ -31,15 +31,18 @@ export default function VerifyPage() {
     }
 
     try {
-      const response = await axios.post(`${API_BASE}/note_tool/auth/2fa/verify`, {
-        userId,
-        token,
-      });
+      const response = await axios.post(
+        `${API_BASE}/note_tool/auth/2fa/verify`,
+        {
+          userId,
+          token,
+        },
+        { withCredentials: true }
+      );
 
       if (response.data.token) {
         setMessage(response.data.message || 'Verification successful! Redirecting to dashboard...');
         setMessageType('success');
-        localStorage.setItem('token', response.data.token);
         localStorage.removeItem('userId');
         setTimeout(() => {
           router.push('/dashboard');
@@ -57,7 +60,7 @@ export default function VerifyPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
         <h1 className="text-2xl font-bold text-center text-gray-900">Two-Step Verification</h1>
         <form className="space-y-6" onSubmit={handleSubmit}>

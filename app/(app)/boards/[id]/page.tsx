@@ -24,6 +24,7 @@ export default function BoardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const boardId = Number(params.id);
+  const [isMobile, setIsMobile] = useState(false);
   const [cards, setCards] = useState<Card[]>([]);
   const [positions, setPositions] = useState<Record<number, { x: number; y: number; width?: number | null }>>({});
   const [allCards, setAllCards] = useState<Card[]>([]);
@@ -65,6 +66,35 @@ export default function BoardDetailPage() {
     startWidth: number;
     pointerX: number;
   } | null>(null);
+  const touchStateRef = useRef<{
+    mode: 'pan' | 'pinch' | null;
+    startX: number;
+    startY: number;
+    startVx: number;
+    startVy: number;
+    startScale: number;
+    startDist: number;
+    moved: boolean;
+    target: EventTarget | null;
+  }>({
+    mode: null,
+    startX: 0,
+    startY: 0,
+    startVx: 0,
+    startVy: 0,
+    startScale: 1,
+    startDist: 0,
+    moved: false,
+    target: null,
+  });
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const handleChange = () => setIsMobile(media.matches);
+    handleChange();
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -94,7 +124,7 @@ export default function BoardDetailPage() {
           setCardOpenMode(settingsData.cardOpenMode);
         }
       } catch (err: any) {
-        if (err?.message === 'NO_TOKEN') {
+        if (err?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
           return;
         }
@@ -138,6 +168,21 @@ export default function BoardDetailPage() {
       },
     }));
     setSpawnPoint(null);
+  };
+
+  const openCreatePageFromBoard = (point?: { x: number; y: number }) => {
+    const params = new URLSearchParams();
+    params.set('boardId', String(boardId));
+    if (point) {
+      params.set('x', String(Math.round(point.x)));
+      params.set('y', String(Math.round(point.y)));
+    }
+    router.push(`/cards/new?${params.toString()}`);
+  };
+
+  const openCreateChooserAtPoint = (point: { x: number; y: number }) => {
+    setSpawnPoint(point);
+    setShowCreateChooser(true);
   };
 
   const handleImportBatch = async () => {
@@ -211,6 +256,115 @@ export default function BoardDetailPage() {
     stage.addEventListener('wheel', handleWheel, { passive: false });
     return () => stage.removeEventListener('wheel', handleWheel);
   }, []);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const getDistance = (a: Touch, b: Touch) => {
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      return Math.hypot(dx, dy);
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (!stageRef.current) return;
+      const target = event.target as HTMLElement;
+      if (target?.closest?.('[data-card="true"]')) return;
+      const touches = event.touches;
+      if (touches.length === 1) {
+        const touch = touches[0];
+        touchStateRef.current = {
+          mode: 'pan',
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startVx: viewportRef.current.x,
+          startVy: viewportRef.current.y,
+          startScale: viewportRef.current.scale,
+          startDist: 0,
+          moved: false,
+          target: event.target,
+        };
+      } else if (touches.length === 2) {
+        const dist = getDistance(touches[0], touches[1]);
+        touchStateRef.current = {
+          mode: 'pinch',
+          startX: 0,
+          startY: 0,
+          startVx: viewportRef.current.x,
+          startVy: viewportRef.current.y,
+          startScale: viewportRef.current.scale,
+          startDist: dist,
+          moved: true,
+          target: event.target,
+        };
+      }
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const state = touchStateRef.current;
+      if (!state.mode) return;
+      const touches = event.touches;
+      if (state.mode === 'pan' && touches.length === 1) {
+        const touch = touches[0];
+        const dx = touch.clientX - state.startX;
+        const dy = touch.clientY - state.startY;
+        if (Math.abs(dx) + Math.abs(dy) > 4) {
+          state.moved = true;
+        }
+        event.preventDefault();
+        setViewport({
+          x: state.startVx + dx,
+          y: state.startVy + dy,
+          scale: state.startScale,
+        });
+      } else if (state.mode === 'pinch' && touches.length === 2) {
+        event.preventDefault();
+        const rect = stage.getBoundingClientRect();
+        const midX = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
+        const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
+        const dist = getDistance(touches[0], touches[1]);
+        const scale = state.startScale;
+        const nextScale = Math.min(2.2, Math.max(0.5, scale * (dist / state.startDist)));
+        const worldX = (midX - state.startVx) / scale;
+        const worldY = (midY - state.startVy) / scale;
+        const nextX = midX - worldX * nextScale;
+        const nextY = midY - worldY * nextScale;
+        setViewport({ x: nextX, y: nextY, scale: nextScale });
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      const state = touchStateRef.current;
+      if (!state.mode) return;
+      if (state.mode === 'pan' && !state.moved && tool === 'add') {
+        const target = state.target as HTMLElement | null;
+        if (target?.closest?.('[data-card="true"]')) {
+          touchStateRef.current.mode = null;
+          return;
+        }
+        const rect = stage.getBoundingClientRect();
+        const touch = event.changedTouches[0];
+        if (touch && rect) {
+          const worldX = (touch.clientX - rect.left - viewportRef.current.x) / viewportRef.current.scale;
+          const worldY = (touch.clientY - rect.top - viewportRef.current.y) / viewportRef.current.scale;
+          openCreateChooserAtPoint({ x: Math.round(worldX), y: Math.round(worldY) });
+        }
+      }
+      touchStateRef.current.mode = null;
+    };
+
+    stage.addEventListener('touchstart', handleTouchStart, { passive: true });
+    stage.addEventListener('touchmove', handleTouchMove, { passive: false });
+    stage.addEventListener('touchend', handleTouchEnd, { passive: true });
+    stage.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    return () => {
+      stage.removeEventListener('touchstart', handleTouchStart);
+      stage.removeEventListener('touchmove', handleTouchMove);
+      stage.removeEventListener('touchend', handleTouchEnd);
+      stage.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [tool]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -358,6 +512,7 @@ export default function BoardDetailPage() {
   };
 
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
+    if (isMobile) return;
     setCardOpenMode(mode);
     try {
       await updateUserSettings({ cardOpenMode: mode });
@@ -396,7 +551,7 @@ export default function BoardDetailPage() {
       setShowRename(false);
       setShowBoardMenu(false);
     } catch (err: any) {
-      if (err?.message === 'NO_TOKEN') {
+      if (err?.message === 'UNAUTHORIZED') {
         router.push('/auth/login');
         return;
       }
@@ -409,7 +564,7 @@ export default function BoardDetailPage() {
       await deleteBoard(boardId);
       router.push('/boards');
     } catch (err: any) {
-      if (err?.message === 'NO_TOKEN') {
+      if (err?.message === 'UNAUTHORIZED') {
         router.push('/auth/login');
         return;
       }
@@ -426,8 +581,8 @@ export default function BoardDetailPage() {
           </h1>
         </div>
 
-        <div className="absolute right-6 top-6 z-30 flex flex-col items-end gap-4">
-          <div className="flex w-72 flex-col gap-3">
+        <div className="absolute right-4 top-4 z-30 flex flex-col items-end gap-4 sm:right-6 sm:top-6">
+          <div className="flex w-[90vw] max-w-[22rem] flex-col gap-3 sm:w-72">
             <div className="flex items-center justify-end gap-1">
               {showSearch && (
                 <div className="relative">
@@ -435,10 +590,10 @@ export default function BoardDetailPage() {
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search in board..."
-                    className="w-56 rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    className="w-full min-w-[12rem] rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-slate-300 sm:w-56"
                   />
                   {query.trim() && (
-                    <div className="pointer-events-auto absolute left-0 top-12 z-40 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur">
+                    <div className="pointer-events-auto absolute left-0 top-12 z-40 w-[90vw] max-w-[22rem] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur sm:w-80">
                       <div className="border-b border-slate-200 px-4 py-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                           Search Results
@@ -495,35 +650,55 @@ export default function BoardDetailPage() {
                   </svg>
                 </button>
               </div>
-              <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => handleOpenModeChange('modal')}
-                  className={`rounded-full p-2 ${
-                    cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Open in modal"
-                  aria-label="Open in modal"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleOpenModeChange('sidepanel')}
-                  className={`rounded-full p-2 ${
-                    cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Open in side panel"
-                  aria-label="Open in side panel"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
-                    <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
-                  </svg>
-                </button>
-              </div>
+              {!isMobile && (
+                <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenModeChange('modal')}
+                    className={`rounded-full p-2 ${
+                      cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    title="Open in modal"
+                    aria-label="Open in modal"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <rect
+                        x="5"
+                        y="6"
+                        width="14"
+                        height="12"
+                        rx="1.6"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        fill="none"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenModeChange('sidepanel')}
+                    className={`rounded-full p-2 ${
+                      cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    title="Open in side panel"
+                    aria-label="Open in side panel"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <rect
+                        x="4"
+                        y="6"
+                        width="16"
+                        height="12"
+                        rx="1.6"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        fill="none"
+                      />
+                      <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <div className="relative">
                 <button
                   type="button"
@@ -690,10 +865,10 @@ export default function BoardDetailPage() {
             if (!rect) return;
             const worldX = (event.clientX - rect.left - viewport.x) / viewport.scale;
             const worldY = (event.clientY - rect.top - viewport.y) / viewport.scale;
-            setSpawnPoint({ x: Math.round(worldX), y: Math.round(worldY) });
-            setShowCreateChooser(true);
+            const point = { x: Math.round(worldX), y: Math.round(worldY) };
+            openCreateChooserAtPoint(point);
           }}
-          className={`absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] dark-grid ${
+          className={`absolute inset-0 touch-none overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] dark-grid ${
             tool === 'add' ? 'cursor-crosshair' : 'cursor-grab'
           }`}
         >
@@ -718,7 +893,13 @@ export default function BoardDetailPage() {
                   onPointerDown={(event) => beginDrag(event, card.id)}
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
-                  onDoubleClick={() => setSelectedCard(card)}
+                  onDoubleClick={() => {
+                    if (isMobile) {
+                      router.push(`/cards/${card.id}?boardId=${boardId}`);
+                      return;
+                    }
+                    setSelectedCard(card);
+                  }}
                   className={`absolute select-none ${tool === 'add' ? 'cursor-grab' : 'cursor-default'}`}
                   style={{
                     transform: `translate(${pos.x}px, ${pos.y}px)`,
@@ -742,6 +923,10 @@ export default function BoardDetailPage() {
                       onPointerDown={(event) => event.stopPropagation()}
                       onClick={(event) => {
                         event.stopPropagation();
+                        if (isMobile) {
+                          router.push(`/cards/${card.id}?boardId=${boardId}`);
+                          return;
+                        }
                         setSelectedCard(card);
                       }}
                       className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm hover:bg-slate-100"
@@ -787,14 +972,16 @@ export default function BoardDetailPage() {
 
       <button
         type="button"
-        onClick={() => setShowCreateChooser(true)}
+        onClick={() => {
+          setShowCreateChooser(true);
+        }}
         className="hidden"
         aria-label="Create card"
       />
 
       {showCreateChooser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-[90vw] max-w-md rounded-2xl bg-white p-6 shadow-2xl">
             <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Add to board</div>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">Choose action</h3>
             <div className="mt-4 grid gap-3">
@@ -803,6 +990,10 @@ export default function BoardDetailPage() {
                 onClick={() => {
                   setShowCreateChooser(false);
                   setShowImport(false);
+                  if (isMobile) {
+                    openCreatePageFromBoard(spawnPoint ?? undefined);
+                    return;
+                  }
                   setShowCreate(true);
                 }}
                 className="rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-900 hover:bg-slate-50"

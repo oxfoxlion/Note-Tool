@@ -2,18 +2,20 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../../../../lib/markdownSanitize';
-import { Card, deleteCard, getCards, updateCard } from '../../../../lib/noteToolApi';
+import { Card, deleteCard, getCards, removeCardFromBoard, updateCard } from '../../../../lib/noteToolApi';
 
 export default function CardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const cardId = params.id;
+  const [isMobile, setIsMobile] = useState(false);
   const [card, setCard] = useState<Card | null>(null);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [viewMode, setViewMode] = useState<'view' | 'edit' | 'split'>('view');
@@ -30,6 +32,27 @@ export default function CardDetailPage() {
   const [showMentions, setShowMentions] = useState(false);
   const [mentionPos, setMentionPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const mentionMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+
+  const boardId = useMemo(() => {
+    const raw = searchParams.get('boardId');
+    const parsed = raw ? Number(raw) : null;
+    return Number.isFinite(parsed) ? (parsed as number) : null;
+  }, [searchParams]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const handleChange = () => setIsMobile(media.matches);
+    handleChange();
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && viewMode === 'split') {
+      setViewMode('view');
+    }
+  }, [isMobile, viewMode]);
 
   useEffect(() => {
     const load = async () => {
@@ -44,7 +67,7 @@ export default function CardDetailPage() {
           lastSavedRef.current = { title: found.title, content: found.content ?? '' };
         }
       } catch (err: any) {
-        if (err?.message === 'NO_TOKEN') {
+        if (err?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
           return;
         }
@@ -599,23 +622,25 @@ export default function CardDetailPage() {
                 <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
               </svg>
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('split')}
-              className={`rounded-full p-2 ${
-                viewMode === 'split' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              title="Split"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                <path
-                  d="M4 5h7v14H4zM13 5h7v14h-7z"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-              </svg>
-            </button>
+            {!isMobile && (
+              <button
+                type="button"
+                onClick={() => setViewMode('split')}
+                className={`rounded-full p-2 ${
+                  viewMode === 'split' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                title="Split"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M4 5h7v14H4zM13 5h7v14h-7z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
           <button
             type="button"
@@ -624,6 +649,19 @@ export default function CardDetailPage() {
           >
             Delete
           </button>
+          {boardId && (
+            <button
+              type="button"
+              onClick={() => setShowRemoveConfirm(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+              aria-label="Remove from board"
+              title="Remove from board"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                <path d="M4 12h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -802,6 +840,46 @@ export default function CardDetailPage() {
                   <span className="text-xs text-slate-400">#{item.id}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRemoveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Remove</div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">Remove from board?</h3>
+            <p className="mt-2 text-sm text-slate-600">This will remove the card from this board only.</p>
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRemoveConfirm(false)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!boardId || !card) return;
+                  try {
+                    await removeCardFromBoard(boardId, card.id);
+                    router.push(`/boards/${boardId}`);
+                  } catch (err: any) {
+                    if (err?.message === 'UNAUTHORIZED') {
+                      router.push('/auth/login');
+                      return;
+                    }
+                    setError('Failed to remove card.');
+                  } finally {
+                    setShowRemoveConfirm(false);
+                  }
+                }}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Remove
+              </button>
             </div>
           </div>
         </div>

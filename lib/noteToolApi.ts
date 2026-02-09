@@ -3,14 +3,21 @@ import { API_BASE } from './api';
 
 const api = axios.create({
   baseURL: API_BASE,
+  withCredentials: true,
 });
 
-function authHeaders() {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    throw new Error('NO_TOKEN');
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      return Promise.reject(new Error('UNAUTHORIZED'));
+    }
+    return Promise.reject(error);
   }
-  return { Authorization: `Bearer ${token}` };
+);
+
+function authHeaders() {
+  return {};
 }
 
 export type Card = {

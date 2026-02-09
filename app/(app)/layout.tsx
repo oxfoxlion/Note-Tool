@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE } from '../../lib/api';
 
 const navItems = [
   { href: '/cards', label: 'Card Box' },
@@ -13,16 +14,17 @@ const navItems = [
 export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/auth/login');
-    }
-  }, [router]);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
+    const media = window.matchMedia('(max-width: 1024px)');
+    const apply = () => {
+      setIsMobile(media.matches);
+      setCollapsed(media.matches);
+    };
+    apply();
+    media.addEventListener('change', apply);
     root.classList.remove('theme-light', 'theme-sand', 'theme-dark');
     root.classList.add('theme-light');
     const appRoot = document.getElementById('app-root');
@@ -30,10 +32,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       appRoot.classList.remove('theme-light', 'theme-sand', 'theme-dark');
       appRoot.classList.add('theme-light');
     }
+    return () => media.removeEventListener('change', apply);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API_BASE}/note_tool/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
     localStorage.removeItem('userId');
     router.push('/auth/login');
   };
@@ -50,10 +60,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       }
     >
       <div className="relative flex min-h-screen">
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+            aria-label="Close sidebar"
+          />
+        )}
         <aside
           className={`shrink-0 overflow-hidden transition-all duration-300 ${
-            collapsed ? 'w-0' : 'w-64'
-          }`}
+            collapsed ? 'w-0' : 'w-full'
+          } fixed inset-y-0 left-0 z-50 lg:static lg:z-auto lg:w-64`}
           style={{ background: 'var(--sidebar-bg)', color: 'var(--sidebar-fg)' }}
         >
           <div className={`px-4 pt-6 ${collapsed ? 'px-3' : 'px-6'}`}>
@@ -87,6 +105,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => {
+                  if (isMobile) {
+                    setCollapsed(true);
+                  }
+                }}
                 className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-slate-800/60 hover:text-white ${
                   collapsed ? 'justify-center' : 'gap-3'
                 }`}

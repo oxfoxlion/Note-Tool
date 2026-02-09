@@ -27,10 +27,14 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await axios.post(`${API_BASE}/note_tool/auth/login`, {
-        email,
-        password,
-      });
+      const response = await axios.post(
+        `${API_BASE}/note_tool/auth/login`,
+        {
+          email,
+          password,
+        },
+        { withCredentials: true }
+      );
 
       if (response.data.require2FA) {
         setMessage(response.data.message || '請輸入兩步驟驗證碼。');
@@ -45,7 +49,6 @@ export default function LoginPage() {
       if (response.data.token) {
         setMessage(response.data.message || 'Login successful! Redirecting to 2FA setup...');
         setMessageType('success');
-        localStorage.setItem('token', response.data.token);
         if (response.data.userId) {
           localStorage.setItem('userId', response.data.userId);
         }
@@ -66,7 +69,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
         <h1 className="text-2xl font-bold text-center text-gray-900">Login</h1>
         <form className="space-y-6" onSubmit={handleSubmit}>

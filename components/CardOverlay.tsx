@@ -58,9 +58,15 @@ export default function CardOverlay({
   useEffect(() => {
     if (mode !== 'sidepanel') return;
     const root = document.getElementById('app-root') ?? document.documentElement;
+    const media = window.matchMedia('(max-width: 1024px)');
+    const applyWidth = () => {
+      (root as HTMLElement).style.setProperty('--sidepanel-width', media.matches ? '0px' : '36rem');
+    };
     root.classList.add('has-sidepanel');
-    (root as HTMLElement).style.setProperty('--sidepanel-width', '36rem');
+    applyWidth();
+    media.addEventListener('change', applyWidth);
     return () => {
+      media.removeEventListener('change', applyWidth);
       root.classList.remove('has-sidepanel');
       (root as HTMLElement).style.removeProperty('--sidepanel-width');
     };
@@ -487,8 +493,8 @@ export default function CardOverlay({
         />
       )}
       <div className={`relative ${panelClass} flex h-full flex-col`}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <nav className="flex items-center gap-2 text-xs font-medium text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+          <nav className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-500">
             <button type="button" onClick={onClose} className="hover:text-slate-700">
               Card Box
             </button>
@@ -496,7 +502,7 @@ export default function CardOverlay({
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="w-40 border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 focus:outline-none"
+              className="w-28 border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 focus:outline-none sm:w-40"
               placeholder="Untitled"
             />
           </nav>
