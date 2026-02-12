@@ -43,9 +43,10 @@ export default function VerifyPage() {
       if (response.data.token) {
         setMessage(response.data.message || 'Verification successful! Redirecting to dashboard...');
         setMessageType('success');
+        localStorage.setItem('note_tool_token', response.data.token);
         localStorage.removeItem('userId');
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push('/boards');
         }, 2000);
       } else {
         setMessage(response.data.message || 'Verification failed. Invalid code.');

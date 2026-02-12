@@ -15,11 +15,14 @@ export default function Setup2FAPage() {
   useEffect(() => {
     const setup2FA = async () => {
       try {
+        const token =
+          typeof window !== 'undefined' ? localStorage.getItem('note_tool_token') || '' : '';
         const response = await axios.post(
           `${API_BASE}/note_tool/auth/2fa/setup`,
           {},
           {
             withCredentials: true,
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           }
         );
 

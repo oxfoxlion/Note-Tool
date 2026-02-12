@@ -17,7 +17,14 @@ api.interceptors.response.use(
 );
 
 function authHeaders() {
-  return {};
+  if (typeof window === 'undefined') return {};
+  let token = '';
+  try {
+    token = localStorage.getItem('note_tool_token') || '';
+  } catch (error) {
+    console.warn('Failed to read auth token:', error);
+  }
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export type Card = {

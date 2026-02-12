@@ -49,6 +49,7 @@ export default function LoginPage() {
       if (response.data.token) {
         setMessage(response.data.message || 'Login successful! Redirecting to 2FA setup...');
         setMessageType('success');
+        localStorage.setItem('note_tool_token', response.data.token);
         if (response.data.userId) {
           localStorage.setItem('userId', response.data.userId);
         }

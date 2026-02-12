@@ -45,6 +45,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       console.error('Logout failed:', error);
     }
     localStorage.removeItem('userId');
+    localStorage.removeItem('note_tool_token');
     router.push('/auth/login');
   };
 
