@@ -49,6 +49,39 @@ export type Board = {
   card_count?: number;
 };
 
+export type BoardRegion = {
+  id: number;
+  board_id: number;
+  name: string;
+  x_pos: number;
+  y_pos: number;
+  width: number;
+  height: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BoardShareLink = {
+  id: number;
+  board_id: number;
+  token: string;
+  permission: 'read' | 'edit';
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+};
+
+export type SharedBoardPayload = {
+  board: Board;
+  cards: Card[];
+  regions: BoardRegion[];
+  share: {
+    permission: 'read' | 'edit';
+    expires_at: string | null;
+  };
+};
+
 export type UserSettings = {
   cardOpenMode: 'modal' | 'sidepanel';
   cardPreviewLength: number;
@@ -123,6 +156,60 @@ export async function addExistingCardToBoard(boardId: number, cardId: number) {
 
 export async function removeCardFromBoard(boardId: number, cardId: number) {
   await api.delete(`/note_tool/board/${boardId}/cards/${cardId}`, { headers: authHeaders() });
+}
+
+export async function getBoardRegions(boardId: number): Promise<BoardRegion[]> {
+  const { data } = await api.get(`/note_tool/board/${boardId}/regions`, { headers: authHeaders() });
+  return data;
+}
+
+export async function createBoardRegion(
+  boardId: number,
+  payload: { name: string; x_pos: number; y_pos: number; width: number; height: number }
+) {
+  const { data } = await api.post(`/note_tool/board/${boardId}/regions`, payload, {
+    headers: authHeaders(),
+  });
+  return data as BoardRegion;
+}
+
+export async function updateBoardRegion(
+  boardId: number,
+  regionId: number,
+  payload: { name?: string; x_pos?: number; y_pos?: number; width?: number; height?: number }
+) {
+  const { data } = await api.put(`/note_tool/board/${boardId}/regions/${regionId}`, payload, {
+    headers: authHeaders(),
+  });
+  return data as BoardRegion;
+}
+
+export async function deleteBoardRegion(boardId: number, regionId: number) {
+  await api.delete(`/note_tool/board/${boardId}/regions/${regionId}`, { headers: authHeaders() });
+}
+
+export async function getBoardShareLinks(boardId: number): Promise<BoardShareLink[]> {
+  const { data } = await api.get(`/note_tool/board/${boardId}/share-links`, { headers: authHeaders() });
+  return data;
+}
+
+export async function createBoardShareLink(
+  boardId: number,
+  payload?: { permission?: 'read' | 'edit'; expires_in_days?: number }
+) {
+  const { data } = await api.post(`/note_tool/board/${boardId}/share-links`, payload ?? {}, {
+    headers: authHeaders(),
+  });
+  return data as BoardShareLink;
+}
+
+export async function revokeBoardShareLink(boardId: number, shareLinkId: number) {
+  await api.delete(`/note_tool/board/${boardId}/share-links/${shareLinkId}`, { headers: authHeaders() });
+}
+
+export async function getSharedBoardByToken(token: string): Promise<SharedBoardPayload> {
+  const { data } = await api.get(`/note_tool/board/share/${encodeURIComponent(token)}`);
+  return data;
 }
 
 export async function getUserSettings(): Promise<UserSettings> {

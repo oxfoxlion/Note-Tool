@@ -70,9 +70,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           />
         )}
         <aside
-          className={`shrink-0 overflow-hidden transition-all duration-300 ${
-            collapsed ? 'w-0' : 'w-full'
-          } fixed inset-y-0 left-0 z-50 lg:static lg:z-auto lg:w-64`}
+          className={`fixed inset-y-0 left-0 z-50 shrink-0 overflow-hidden transition-all duration-300 lg:static lg:z-auto ${
+            collapsed ? 'w-0 lg:w-0' : 'w-full lg:w-64'
+          }`}
           style={{ background: 'var(--sidebar-bg)', color: 'var(--sidebar-fg)' }}
         >
           <div className={`px-4 pt-6 ${collapsed ? 'px-3' : 'px-6'}`}>

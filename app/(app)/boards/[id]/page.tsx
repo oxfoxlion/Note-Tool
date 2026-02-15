@@ -1,24 +1,46 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import CardOverlay from '../../../../components/CardOverlay';
 import CardCreateOverlay from '../../../../components/CardCreateOverlay';
 import CardPreview from '../../../../components/CardPreview';
 import {
   addExistingCardToBoard,
+  BoardShareLink,
+  BoardRegion as ApiBoardRegion,
   Card,
+  createBoardRegion,
+  createBoardShareLink,
   createCardInBoard,
+  deleteBoardRegion,
   deleteBoard,
+  getBoardShareLinks,
   getBoard,
+  getBoardRegions,
   getCards,
   getUserSettings,
   removeCardFromBoard,
+  updateBoardRegion,
+  revokeBoardShareLink,
   updateBoardCardPosition,
   updateBoard,
   updateCard,
   updateUserSettings,
 } from '../../../../lib/noteToolApi';
+
+type BoardRegionView = {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof Error && error.message === 'UNAUTHORIZED';
+}
 
 export default function BoardDetailPage() {
   const params = useParams<{ id: string }>();
@@ -35,7 +57,7 @@ export default function BoardDetailPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [spawnPoint, setSpawnPoint] = useState<{ x: number; y: number } | null>(null);
-  const [tool, setTool] = useState<'pan' | 'add'>('add');
+  const [tool, setTool] = useState<'pan' | 'add' | 'region'>('add');
   const [selectedImportIds, setSelectedImportIds] = useState<Set<number>>(new Set());
   const [importQuery, setImportQuery] = useState('');
   const [query, setQuery] = useState('');
@@ -46,7 +68,18 @@ export default function BoardDetailPage() {
   const [renameValue, setRenameValue] = useState('');
   const [tagValue, setTagValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [shareLinks, setShareLinks] = useState<BoardShareLink[]>([]);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState('');
+  const [regions, setRegions] = useState<BoardRegionView[]>([]);
+  const [draftRegion, setDraftRegion] = useState<Omit<BoardRegionView, 'id' | 'name'> | null>(null);
+  const [showRegionName, setShowRegionName] = useState(false);
+  const [regionNameValue, setRegionNameValue] = useState('');
+  const [regionNameError, setRegionNameError] = useState('');
+  const [pendingRegion, setPendingRegion] = useState<Omit<BoardRegionView, 'id' | 'name'> | null>(null);
+  const [editingRegionId, setEditingRegionId] = useState<number | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const defaultCardWidth = 420;
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -65,6 +98,17 @@ export default function BoardDetailPage() {
     id: number;
     startWidth: number;
     pointerX: number;
+  } | null>(null);
+  const regionDrawRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const regionTouchRef = useRef<{
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
   } | null>(null);
   const touchStateRef = useRef<{
     mode: 'pan' | 'pinch' | null;
@@ -88,6 +132,15 @@ export default function BoardDetailPage() {
     target: null,
   });
 
+  const mapApiRegionToView = (region: ApiBoardRegion): BoardRegionView => ({
+    id: region.id,
+    name: region.name,
+    x: region.x_pos,
+    y: region.y_pos,
+    width: region.width,
+    height: region.height,
+  });
+
   useEffect(() => {
     const media = window.matchMedia('(max-width: 768px)');
     const handleChange = () => setIsMobile(media.matches);
@@ -99,10 +152,11 @@ export default function BoardDetailPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [boardData, cardsData, settingsData] = await Promise.all([
+        const [boardData, cardsData, settingsData, regionsData] = await Promise.all([
           getBoard(boardId),
           getCards(),
           getUserSettings(),
+          getBoardRegions(boardId),
         ]);
         setBoardName(boardData.board.name);
         setRenameValue(boardData.board.name);
@@ -123,8 +177,9 @@ export default function BoardDetailPage() {
         if (settingsData?.cardOpenMode) {
           setCardOpenMode(settingsData.cardOpenMode);
         }
-      } catch (err: any) {
-        if (err?.message === 'UNAUTHORIZED') {
+        setRegions(regionsData.map(mapApiRegionToView));
+      } catch (err: unknown) {
+        if (isUnauthorizedError(err)) {
           router.push('/auth/login');
           return;
         }
@@ -229,6 +284,29 @@ export default function BoardDetailPage() {
     setSelectedCard(null);
   };
 
+  const finalizeRegionFromBounds = useCallback((startX: number, startY: number, endX: number, endY: number) => {
+    const left = Math.min(startX, endX);
+    const top = Math.min(startY, endY);
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
+
+    setDraftRegion(null);
+    if (width < 40 || height < 30) {
+      return;
+    }
+
+    setPendingRegion({
+      x: Math.round(left),
+      y: Math.round(top),
+      width: Math.round(width),
+      height: Math.round(height),
+    });
+    setEditingRegionId(null);
+    setRegionNameError('');
+    setRegionNameValue(`Region ${regions.length + 1}`);
+    setShowRegionName(true);
+  }, [regions.length]);
+
   useEffect(() => {
     viewportRef.current = viewport;
   }, [viewport]);
@@ -246,7 +324,7 @@ export default function BoardDetailPage() {
       const { x: offsetX, y: offsetY, scale } = viewportRef.current;
       const pointerX = event.clientX - rect.left;
       const pointerY = event.clientY - rect.top;
-      const nextScale = Math.min(2.2, Math.max(0.5, scale - event.deltaY * 0.001));
+      const nextScale = Math.min(2.2, Math.max(0.25, scale - event.deltaY * 0.001));
       const worldX = (pointerX - offsetX) / scale;
       const worldY = (pointerY - offsetY) / scale;
       const nextX = pointerX - worldX * nextScale;
@@ -272,6 +350,26 @@ export default function BoardDetailPage() {
       const target = event.target as HTMLElement;
       if (target?.closest?.('[data-card="true"]')) return;
       const touches = event.touches;
+      if (tool === 'region' && touches.length === 1) {
+        const rect = stage.getBoundingClientRect();
+        const touch = touches[0];
+        const worldX = (touch.clientX - rect.left - viewportRef.current.x) / viewportRef.current.scale;
+        const worldY = (touch.clientY - rect.top - viewportRef.current.y) / viewportRef.current.scale;
+        regionTouchRef.current = {
+          startX: worldX,
+          startY: worldY,
+          lastX: worldX,
+          lastY: worldY,
+        };
+        setDraftRegion({
+          x: worldX,
+          y: worldY,
+          width: 0,
+          height: 0,
+        });
+        touchStateRef.current.mode = null;
+        return;
+      }
       if (touches.length === 1) {
         const touch = touches[0];
         touchStateRef.current = {
@@ -302,6 +400,26 @@ export default function BoardDetailPage() {
     };
 
     const handleTouchMove = (event: TouchEvent) => {
+      if (tool === 'region' && regionTouchRef.current && event.touches.length === 1) {
+        event.preventDefault();
+        const rect = stage.getBoundingClientRect();
+        const touch = event.touches[0];
+        const worldX = (touch.clientX - rect.left - viewportRef.current.x) / viewportRef.current.scale;
+        const worldY = (touch.clientY - rect.top - viewportRef.current.y) / viewportRef.current.scale;
+        regionTouchRef.current.lastX = worldX;
+        regionTouchRef.current.lastY = worldY;
+        const left = Math.min(regionTouchRef.current.startX, worldX);
+        const top = Math.min(regionTouchRef.current.startY, worldY);
+        const width = Math.abs(worldX - regionTouchRef.current.startX);
+        const height = Math.abs(worldY - regionTouchRef.current.startY);
+        setDraftRegion({
+          x: left,
+          y: top,
+          width,
+          height,
+        });
+        return;
+      }
       const state = touchStateRef.current;
       if (!state.mode) return;
       const touches = event.touches;
@@ -325,7 +443,7 @@ export default function BoardDetailPage() {
         const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
         const dist = getDistance(touches[0], touches[1]);
         const scale = state.startScale;
-        const nextScale = Math.min(2.2, Math.max(0.5, scale * (dist / state.startDist)));
+        const nextScale = Math.min(2.2, Math.max(0.25, scale * (dist / state.startDist)));
         const worldX = (midX - state.startVx) / scale;
         const worldY = (midY - state.startVy) / scale;
         const nextX = midX - worldX * nextScale;
@@ -335,6 +453,12 @@ export default function BoardDetailPage() {
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
+      if (tool === 'region' && regionTouchRef.current) {
+        const drawing = regionTouchRef.current;
+        regionTouchRef.current = null;
+        finalizeRegionFromBounds(drawing.startX, drawing.startY, drawing.lastX, drawing.lastY);
+        return;
+      }
       const state = touchStateRef.current;
       if (!state.mode) return;
       if (state.mode === 'pan' && !state.moved && tool === 'add') {
@@ -364,7 +488,7 @@ export default function BoardDetailPage() {
       stage.removeEventListener('touchend', handleTouchEnd);
       stage.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [tool]);
+  }, [tool, finalizeRegionFromBounds]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -375,10 +499,14 @@ export default function BoardDetailPage() {
   }, []);
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (tool === 'pan') {
+    if (event.button === 1) {
+      event.preventDefault();
+    } else if (tool === 'pan') {
       if (event.button !== 0) return;
     } else if (tool === 'add') {
       if (event.button !== 1) return;
+    } else if (tool === 'region') {
+      return;
     } else {
       return;
     }
@@ -409,7 +537,10 @@ export default function BoardDetailPage() {
   const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
     setIsPanning(false);
     panStartRef.current = null;
-    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
   };
 
   const beginDrag = (event: React.PointerEvent<HTMLDivElement>, cardId: number) => {
@@ -511,12 +642,116 @@ export default function BoardDetailPage() {
     }
   };
 
+  const closeRegionNameModal = () => {
+    setShowRegionName(false);
+    setRegionNameValue('');
+    setRegionNameError('');
+    setPendingRegion(null);
+    setEditingRegionId(null);
+  };
+
+  const handleSaveRegionName = async () => {
+    const name = regionNameValue.trim();
+    if (!name) {
+      setRegionNameError('Region name is required.');
+      return;
+    }
+
+    try {
+      if (editingRegionId) {
+        const updated = await updateBoardRegion(boardId, editingRegionId, { name });
+        const updatedRegion = mapApiRegionToView(updated);
+        setRegions((prev) =>
+          prev.map((region) => (region.id === editingRegionId ? updatedRegion : region))
+        );
+        closeRegionNameModal();
+        return;
+      }
+
+      if (!pendingRegion) return;
+      const created = await createBoardRegion(boardId, {
+        name,
+        x_pos: pendingRegion.x,
+        y_pos: pendingRegion.y,
+        width: pendingRegion.width,
+        height: pendingRegion.height,
+      });
+      setRegions((prev) => [...prev, mapApiRegionToView(created)]);
+      closeRegionNameModal();
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setRegionNameError('Failed to save region.');
+    }
+  };
+
+  const startRegionDraw = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (tool !== 'region' || event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-card="true"]')) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const worldX = (event.clientX - rect.left - viewport.x) / viewport.scale;
+    const worldY = (event.clientY - rect.top - viewport.y) / viewport.scale;
+    regionDrawRef.current = {
+      pointerId: event.pointerId,
+      startX: worldX,
+      startY: worldY,
+    };
+    setDraftRegion({
+      x: worldX,
+      y: worldY,
+      width: 0,
+      height: 0,
+    });
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const moveRegionDraw = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drawing = regionDrawRef.current;
+    if (!drawing) return;
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const worldX = (event.clientX - rect.left - viewport.x) / viewport.scale;
+    const worldY = (event.clientY - rect.top - viewport.y) / viewport.scale;
+    const left = Math.min(drawing.startX, worldX);
+    const top = Math.min(drawing.startY, worldY);
+    const width = Math.abs(worldX - drawing.startX);
+    const height = Math.abs(worldY - drawing.startY);
+    setDraftRegion({
+      x: left,
+      y: top,
+      width,
+      height,
+    });
+  };
+
+  const endRegionDraw = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drawing = regionDrawRef.current;
+    if (!drawing) return;
+    regionDrawRef.current = null;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(drawing.pointerId)) {
+      target.releasePointerCapture(drawing.pointerId);
+    }
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setDraftRegion(null);
+      return;
+    }
+    const worldX = (event.clientX - rect.left - viewport.x) / viewport.scale;
+    const worldY = (event.clientY - rect.top - viewport.y) / viewport.scale;
+    finalizeRegionFromBounds(drawing.startX, drawing.startY, worldX, worldY);
+  };
+
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
     if (isMobile) return;
     setCardOpenMode(mode);
     try {
       await updateUserSettings({ cardOpenMode: mode });
-    } catch (err) {
+    } catch {
       setError('Failed to update view mode.');
     }
   };
@@ -550,8 +785,8 @@ export default function BoardDetailPage() {
       setBoardName(updated.name);
       setShowRename(false);
       setShowBoardMenu(false);
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }
@@ -563,12 +798,72 @@ export default function BoardDetailPage() {
     try {
       await deleteBoard(boardId);
       router.push('/boards');
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }
       setError('Failed to delete board.');
+    }
+  };
+
+  const handleOpenShare = async () => {
+    setShowBoardMenu(false);
+    setShareError('');
+    setShareBusy(true);
+    try {
+      const links = await getBoardShareLinks(boardId);
+      setShareLinks(links);
+      setShowShare(true);
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to load share links.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const toShareUrl = (token: string) => {
+    if (typeof window === 'undefined') return `/shared-board/${token}`;
+    return `${window.location.origin}/shared-board/${token}`;
+  };
+
+  const handleCreateShareLink = async () => {
+    setShareError('');
+    setShareBusy(true);
+    try {
+      const created = await createBoardShareLink(boardId, { permission: 'read' });
+      setShareLinks((prev) => [created, ...prev]);
+      const shareUrl = toShareUrl(created.token);
+      await navigator.clipboard.writeText(shareUrl);
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setShareError('Failed to create share link.');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleRevokeShareLink = async (shareLinkId: number) => {
+    setShareError('');
+    setShareBusy(true);
+    try {
+      await revokeBoardShareLink(boardId, shareLinkId);
+      setShareLinks((prev) => prev.filter((link) => link.id !== shareLinkId));
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setShareError('Failed to revoke share link.');
+    } finally {
+      setShareBusy(false);
     }
   };
 
@@ -717,6 +1012,13 @@ export default function BoardDetailPage() {
                   <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                     <button
                       type="button"
+                      onClick={handleOpenShare}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Share board
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         setShowRename(true);
                         setShowBoardMenu(false);
@@ -788,6 +1090,21 @@ export default function BoardDetailPage() {
                   <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
                 </svg>
               </button>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setTool('region')}
+                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
+                  tool === 'region'
+                    ? 'border border-slate-200 bg-slate-100 text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-100'
+                } ${tool === 'region' ? 'tool-active' : ''}`}
+                title="Draw region"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <rect x="5" y="5" width="14" height="14" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
+              </button>
               <div className="h-px w-6 bg-slate-200" />
               <div className="tool-zoom flex flex-col items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -811,7 +1128,7 @@ export default function BoardDetailPage() {
                   onClick={() =>
                     setViewport((prev) => ({
                       ...prev,
-                      scale: Math.max(0.5, prev.scale - 0.1),
+                      scale: Math.max(0.25, prev.scale - 0.1),
                     }))
                   }
                   className="tool-btn flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
@@ -854,9 +1171,27 @@ export default function BoardDetailPage() {
 
         <div
           ref={stageRef}
-          onPointerDown={beginPan}
-          onPointerMove={movePan}
-          onPointerUp={endPan}
+          onPointerDown={(event) => {
+            if (tool === 'region') {
+              startRegionDraw(event);
+              return;
+            }
+            beginPan(event);
+          }}
+          onPointerMove={(event) => {
+            if (tool === 'region') {
+              moveRegionDraw(event);
+              return;
+            }
+            movePan(event);
+          }}
+          onPointerUp={(event) => {
+            if (tool === 'region') {
+              endRegionDraw(event);
+              return;
+            }
+            endPan(event);
+          }}
           onClick={(event) => {
             if (tool !== 'add') return;
             const target = event.target as HTMLElement;
@@ -869,7 +1204,7 @@ export default function BoardDetailPage() {
             openCreateChooserAtPoint(point);
           }}
           className={`absolute inset-0 touch-none overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] dark-grid ${
-            tool === 'add' ? 'cursor-crosshair' : 'cursor-grab'
+            tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair'
           }`}
         >
           <div
@@ -879,6 +1214,72 @@ export default function BoardDetailPage() {
               transformOrigin: '0 0',
             }}
           >
+            {regions.map((region) => (
+              <div
+                key={region.id}
+                className="absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10 pointer-events-none"
+                style={{
+                  transform: `translate(${region.x}px, ${region.y}px)`,
+                  width: region.width,
+                  height: region.height,
+                }}
+              >
+                <div className="pointer-events-auto absolute left-0 top-0 -translate-y-full rounded-md border border-sky-300 bg-white/95 px-2 py-1 text-[11px] font-semibold text-sky-700 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="max-w-40 truncate">{region.name}</span>
+                    <button
+                      type="button"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPendingRegion(null);
+                        setEditingRegionId(region.id);
+                        setRegionNameError('');
+                        setRegionNameValue(region.name);
+                        setShowRegionName(true);
+                      }}
+                      className="text-sky-600 hover:text-sky-800"
+                      aria-label="Rename region"
+                      title="Rename region"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={async (event) => {
+                        event.stopPropagation();
+                        try {
+                          await deleteBoardRegion(boardId, region.id);
+                          setRegions((prev) => prev.filter((item) => item.id !== region.id));
+                        } catch (err: unknown) {
+                          if (isUnauthorizedError(err)) {
+                            router.push('/auth/login');
+                            return;
+                          }
+                          setError('Failed to delete region.');
+                        }
+                      }}
+                      className="text-rose-500 hover:text-rose-700"
+                      aria-label="Delete region"
+                      title="Delete region"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {draftRegion && (
+              <div
+                className="absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10 pointer-events-none"
+                style={{
+                  transform: `translate(${draftRegion.x}px, ${draftRegion.y}px)`,
+                  width: draftRegion.width,
+                  height: draftRegion.height,
+                }}
+              />
+            )}
             {cards.map((card) => {
               const pos = positions[card.id] || { x: 0, y: 0 };
               return (
@@ -1124,6 +1525,104 @@ export default function BoardDetailPage() {
         </div>
       )}
 
+      {showShare && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Share</div>
+                <div className="text-lg font-semibold text-slate-900">Board share links</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowShare(false);
+                  setShareError('');
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+                aria-label="Close"
+                title="Close"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-4 px-6 py-5">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">Create a public view link for this board.</div>
+                <button
+                  type="button"
+                  onClick={handleCreateShareLink}
+                  disabled={shareBusy}
+                  className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  Create link
+                </button>
+              </div>
+              {shareError && <div className="text-xs text-rose-600">{shareError}</div>}
+              <div className="max-h-[45vh] space-y-2 overflow-y-auto">
+                {shareLinks.map((link) => {
+                  const shareUrl = toShareUrl(link.token);
+                  const isRevoked = !!link.revoked_at;
+                  const isExpired = !!link.expires_at && new Date(link.expires_at) < new Date();
+                  return (
+                    <div
+                      key={link.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50/60 p-3"
+                    >
+                      <div className="text-xs font-medium text-slate-500">{shareUrl}</div>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="rounded-full border border-slate-300 px-2 py-0.5 text-slate-600">
+                            {link.permission}
+                          </span>
+                          {isRevoked && (
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-600">
+                              revoked
+                            </span>
+                          )}
+                          {!isRevoked && isExpired && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                              expired
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(shareUrl);
+                            }}
+                            className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                          >
+                            Copy
+                          </button>
+                          {!isRevoked && (
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeShareLink(link.id)}
+                              className="rounded-full border border-rose-200 px-3 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {shareLinks.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+                    No share links yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showRename && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
@@ -1187,6 +1686,47 @@ export default function BoardDetailPage() {
                 className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRegionName && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+              {editingRegionId ? 'Rename region' : 'Create region'}
+            </div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">
+              {editingRegionId ? 'Update region name' : 'Name this region'}
+            </h3>
+            <input
+              value={regionNameValue}
+              onChange={(event) => {
+                setRegionNameValue(event.target.value);
+                if (regionNameError) {
+                  setRegionNameError('');
+                }
+              }}
+              placeholder="Region name"
+              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            {regionNameError && <div className="mt-2 text-xs text-rose-600">{regionNameError}</div>}
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={closeRegionNameModal}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRegionName}
+                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
+              >
+                Save
               </button>
             </div>
           </div>
