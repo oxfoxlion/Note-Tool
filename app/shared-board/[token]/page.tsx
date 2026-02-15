@@ -65,6 +65,7 @@ export default function SharedBoardPage() {
   };
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) {
       event.preventDefault();
@@ -80,6 +81,7 @@ export default function SharedBoardPage() {
   };
 
   const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') return;
     const start = panStartRef.current;
     if (!isPanning || !start) return;
     const deltaX = event.clientX - start.x;
@@ -92,6 +94,7 @@ export default function SharedBoardPage() {
   };
 
   const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') return;
     setIsPanning(false);
     panStartRef.current = null;
     const target = event.currentTarget as HTMLElement;
