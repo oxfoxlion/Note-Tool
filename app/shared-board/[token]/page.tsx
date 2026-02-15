@@ -116,6 +116,7 @@ export default function SharedBoardPage() {
     const handleTouchStart = (event: TouchEvent) => {
       const touches = event.touches;
       if (touches.length === 1) {
+        event.preventDefault();
         const touch = touches[0];
         touchStateRef.current = {
           mode: 'pan',
@@ -127,6 +128,7 @@ export default function SharedBoardPage() {
           startDist: 0,
         };
       } else if (touches.length === 2) {
+        event.preventDefault();
         const dist = getDistance(touches[0], touches[1]);
         touchStateRef.current = {
           mode: 'pinch',
@@ -175,7 +177,7 @@ export default function SharedBoardPage() {
       touchStateRef.current.mode = null;
     };
 
-    stage.addEventListener('touchstart', handleTouchStart, { passive: true });
+    stage.addEventListener('touchstart', handleTouchStart, { passive: false });
     stage.addEventListener('touchmove', handleTouchMove, { passive: false });
     stage.addEventListener('touchend', handleTouchEnd, { passive: true });
     stage.addEventListener('touchcancel', handleTouchEnd, { passive: true });
@@ -281,7 +283,7 @@ export default function SharedBoardPage() {
           onPointerDown={beginPan}
           onPointerMove={movePan}
           onPointerUp={endPan}
-          className="absolute inset-0 touch-none cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] active:cursor-grabbing"
+          className="absolute inset-0 cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] active:cursor-grabbing"
         >
           <div
             className="absolute inset-0"
