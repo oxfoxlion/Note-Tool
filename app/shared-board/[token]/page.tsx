@@ -25,24 +25,23 @@ export default function SharedBoardPage() {
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const viewportRef = useRef(viewport);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [isPanning, setIsPanning] = useState(false);
-  const panStartRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
-  const touchStateRef = useRef<{
-    mode: 'pan' | 'pinch' | null;
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const gestureRef = useRef<{
+    mode: 'none' | 'pan' | 'pinch';
     startX: number;
     startY: number;
     startVx: number;
     startVy: number;
     startScale: number;
-    startDist: number;
+    startDist: number | null;
   }>({
-    mode: null,
+    mode: 'none',
     startX: 0,
     startY: 0,
     startVx: 0,
     startVy: 0,
     startScale: 1,
-    startDist: 0,
+    startDist: null,
   });
 
   useEffect(() => {
@@ -65,130 +64,113 @@ export default function SharedBoardPage() {
   };
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'touch') return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) {
       event.preventDefault();
     }
-    setIsPanning(true);
-    panStartRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      vx: viewport.x,
-      vy: viewport.y,
-    };
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    const pointers = [...pointersRef.current.values()];
+    if (pointers.length === 1) {
+      const p = pointers[0];
+      gestureRef.current = {
+        mode: 'pan',
+        startX: p.x,
+        startY: p.y,
+        startVx: viewportRef.current.x,
+        startVy: viewportRef.current.y,
+        startScale: viewportRef.current.scale,
+        startDist: null,
+      };
+    } else if (pointers.length >= 2) {
+      const [a, b] = pointers;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      gestureRef.current = {
+        mode: 'pinch',
+        startX: 0,
+        startY: 0,
+        startVx: viewportRef.current.x,
+        startVy: viewportRef.current.y,
+        startScale: viewportRef.current.scale,
+        startDist: Math.hypot(dx, dy),
+      };
+    }
   };
 
   const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'touch') return;
-    const start = panStartRef.current;
-    if (!isPanning || !start) return;
-    const deltaX = event.clientX - start.x;
-    const deltaY = event.clientY - start.y;
-    setViewport((prev) => ({
-      ...prev,
-      x: start.vx + deltaX,
-      y: start.vy + deltaY,
-    }));
+    if (!pointersRef.current.has(event.pointerId)) return;
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const pointers = [...pointersRef.current.values()];
+    const gesture = gestureRef.current;
+
+    if (gesture.mode === 'pan' && pointers.length === 1) {
+      const p = pointers[0];
+      const deltaX = p.x - gesture.startX;
+      const deltaY = p.y - gesture.startY;
+      setViewport({
+        x: gesture.startVx + deltaX,
+        y: gesture.startVy + deltaY,
+        scale: gesture.startScale,
+      });
+      return;
+    }
+
+    if (gesture.mode === 'pinch' && pointers.length >= 2 && gesture.startDist) {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const rect = stage.getBoundingClientRect();
+      const [a, b] = pointers;
+      const midX = (a.x + b.x) / 2 - rect.left;
+      const midY = (a.y + b.y) / 2 - rect.top;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const nextScale = Math.min(2.4, Math.max(0.25, gesture.startScale * (dist / gesture.startDist)));
+      const worldX = (midX - gesture.startVx) / gesture.startScale;
+      const worldY = (midY - gesture.startVy) / gesture.startScale;
+      const nextX = midX - worldX * nextScale;
+      const nextY = midY - worldY * nextScale;
+      setViewport({ x: nextX, y: nextY, scale: nextScale });
+    }
   };
 
   const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'touch') return;
-    setIsPanning(false);
-    panStartRef.current = null;
     const target = event.currentTarget as HTMLElement;
     if (target.hasPointerCapture(event.pointerId)) {
       target.releasePointerCapture(event.pointerId);
     }
+    pointersRef.current.delete(event.pointerId);
+    const pointers = [...pointersRef.current.values()];
+
+    if (pointers.length === 0) {
+      gestureRef.current.mode = 'none';
+      return;
+    }
+
+    if (pointers.length === 1) {
+      const p = pointers[0];
+      gestureRef.current = {
+        mode: 'pan',
+        startX: p.x,
+        startY: p.y,
+        startVx: viewportRef.current.x,
+        startVy: viewportRef.current.y,
+        startScale: viewportRef.current.scale,
+        startDist: null,
+      };
+      return;
+    }
+
+    const [a, b] = pointers;
+    gestureRef.current = {
+      mode: 'pinch',
+      startX: 0,
+      startY: 0,
+      startVx: viewportRef.current.x,
+      startVy: viewportRef.current.y,
+      startScale: viewportRef.current.scale,
+      startDist: Math.hypot(a.x - b.x, a.y - b.y),
+    };
   };
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-
-    const getDistance = (a: Touch, b: Touch) => {
-      const dx = a.clientX - b.clientX;
-      const dy = a.clientY - b.clientY;
-      return Math.hypot(dx, dy);
-    };
-
-    const handleTouchStart = (event: TouchEvent) => {
-      const touches = event.touches;
-      if (touches.length === 1) {
-        event.preventDefault();
-        const touch = touches[0];
-        touchStateRef.current = {
-          mode: 'pan',
-          startX: touch.clientX,
-          startY: touch.clientY,
-          startVx: viewportRef.current.x,
-          startVy: viewportRef.current.y,
-          startScale: viewportRef.current.scale,
-          startDist: 0,
-        };
-      } else if (touches.length === 2) {
-        event.preventDefault();
-        const dist = getDistance(touches[0], touches[1]);
-        touchStateRef.current = {
-          mode: 'pinch',
-          startX: 0,
-          startY: 0,
-          startVx: viewportRef.current.x,
-          startVy: viewportRef.current.y,
-          startScale: viewportRef.current.scale,
-          startDist: dist,
-        };
-      }
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      const state = touchStateRef.current;
-      if (!state.mode) return;
-      const touches = event.touches;
-
-      if (state.mode === 'pan' && touches.length === 1) {
-        const touch = touches[0];
-        const dx = touch.clientX - state.startX;
-        const dy = touch.clientY - state.startY;
-        event.preventDefault();
-        setViewport({
-          x: state.startVx + dx,
-          y: state.startVy + dy,
-          scale: state.startScale,
-        });
-      } else if (state.mode === 'pinch' && touches.length === 2) {
-        event.preventDefault();
-        const rect = stage.getBoundingClientRect();
-        const midX = (touches[0].clientX + touches[1].clientX) / 2 - rect.left;
-        const midY = (touches[0].clientY + touches[1].clientY) / 2 - rect.top;
-        const dist = getDistance(touches[0], touches[1]);
-        const scale = state.startScale;
-        const nextScale = Math.min(2.4, Math.max(0.25, scale * (dist / state.startDist)));
-        const worldX = (midX - state.startVx) / scale;
-        const worldY = (midY - state.startVy) / scale;
-        const nextX = midX - worldX * nextScale;
-        const nextY = midY - worldY * nextScale;
-        setViewport({ x: nextX, y: nextY, scale: nextScale });
-      }
-    };
-
-    const handleTouchEnd = () => {
-      touchStateRef.current.mode = null;
-    };
-
-    stage.addEventListener('touchstart', handleTouchStart, { passive: false });
-    stage.addEventListener('touchmove', handleTouchMove, { passive: false });
-    stage.addEventListener('touchend', handleTouchEnd, { passive: true });
-    stage.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-
-    return () => {
-      stage.removeEventListener('touchstart', handleTouchStart);
-      stage.removeEventListener('touchmove', handleTouchMove);
-      stage.removeEventListener('touchend', handleTouchEnd);
-      stage.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -283,7 +265,8 @@ export default function SharedBoardPage() {
           onPointerDown={beginPan}
           onPointerMove={movePan}
           onPointerUp={endPan}
-          className="absolute inset-0 cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] active:cursor-grabbing"
+          onPointerCancel={endPan}
+          className="absolute inset-0 touch-none cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] active:cursor-grabbing"
         >
           <div
             className="absolute inset-0"
