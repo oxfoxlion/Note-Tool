@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
+import MDEditor from '@uiw/react-md-editor';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
@@ -113,13 +113,6 @@ export default function CardDetailPage() {
   }, [title, content, viewMode, card]);
 
   useEffect(() => {
-    if (!editorRef.current) return;
-    const el = editorRef.current;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [content, viewMode]);
-
-  useEffect(() => {
     if (!showMentions) return;
     const menu = mentionMenuRef.current;
     if (!menu) return;
@@ -187,6 +180,27 @@ export default function CardDetailPage() {
     });
   };
 
+  const insertOrderedList = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const lines = content.slice(start, end).split('\n');
+    const nextLines = lines.map((line, idx) => {
+      const match = line.match(/^(\s*)(?:\d+\.\s+)?(.*)$/);
+      const indent = match?.[1] ?? '';
+      const text = match?.[2] ?? line.trimStart();
+      return `${indent}${idx + 1}. ${text}`;
+    });
+    const next = content.slice(0, start) + nextLines.join('\n') + content.slice(end);
+    setContent(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = start;
+      el.selectionEnd = start + nextLines.join('\n').length;
+    });
+  };
+
   const incrementHeading = () => {
     const el = editorRef.current;
     if (!el) return;
@@ -228,20 +242,36 @@ export default function CardDetailPage() {
     });
   };
 
-  const toggleTaskAtLine = (line?: number) => {
-    if (!line) return;
-    const lines = content.split('\n');
-    const idx = line - 1;
-    if (idx < 0 || idx >= lines.length) return;
-    const current = lines[idx];
-    const match = current.match(/^(\s*[-*+]\s+\[)([ xX])(\]\s*)/);
-    if (!match) return;
-    const next = match[2].toLowerCase() === 'x' ? ' ' : 'x';
-    lines[idx] = current.replace(match[0], `${match[1]}${next}${match[3]}`);
-    if (viewMode === 'view') {
-      setViewMode('edit');
+  const findTaskIndexByOffset = (source: string, offset: number) => {
+    const taskPattern = /^(\s*(?:[-*+]|\d+\.)\s+\[[ xX]\]\s*)/gm;
+    let index = 0;
+    let match: RegExpExecArray | null;
+    while ((match = taskPattern.exec(source))) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (offset >= start && offset <= end) return index;
+      if (offset < start) return index;
+      index += 1;
     }
-    setContent(lines.join('\n'));
+    return -1;
+  };
+
+  const toggleTaskAtIndex = (targetTaskIndex: number) => {
+    if (targetTaskIndex < 0) return;
+    const taskPattern = /^(\s*(?:[-*+]|\d+\.)\s+\[)([ xX])(\]\s*)/gm;
+    let index = 0;
+    let match: RegExpExecArray | null;
+    while ((match = taskPattern.exec(content))) {
+      if (index === targetTaskIndex) {
+        const next = match[2].toLowerCase() === 'x' ? ' ' : 'x';
+        const start = match.index;
+        const end = start + match[0].length;
+        const replaced = `${match[1]}${next}${match[3]}`;
+        setContent(content.slice(0, start) + replaced + content.slice(end));
+        return;
+      }
+      index += 1;
+    }
   };
 
   const getCaretCoordinates = (textarea: HTMLTextAreaElement, position: number) => {
@@ -312,38 +342,51 @@ export default function CardDetailPage() {
     text.replace(/@\[\[(\d+)\|([^\]]+)\]\]/g, '[@$2](/cards/$1)');
 
   const renderMarkdown = (text: string) => {
-    const taskLines = text
+    const preparedSource = prepareMarkdown(text);
+    const taskLineNumbers = text
       .split('\n')
-      .map((line, idx) => (line.match(/^\s*[-*+]\s+\[[ xX]\]\s+/) ? idx + 1 : null))
+      .map((line, idx) => (line.match(/^\s*(?:[-*+]|\d+\.)\s+\[[ xX]\]\s+/) ? idx + 1 : null))
       .filter((line): line is number => line !== null);
-    let taskIndex = 0;
+    let renderTaskIndex = 0;
 
     return (
-      <ReactMarkdown
+      <MDEditor.Markdown
+        source={preparedSource}
+        wrapperElement={{ 'data-color-mode': 'light' }}
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
         components={{
           input: ({ ...props }: any) => {
             if (props.type === 'checkbox') {
-              const line = taskLines[taskIndex];
-              taskIndex += 1;
+              const offset = Number(props?.node?.position?.start?.offset);
+              const lineFromNode = Number(props?.node?.position?.start?.line);
+              const fallbackTaskIndex = renderTaskIndex;
+              renderTaskIndex += 1;
               return (
                 <input
                   type="checkbox"
                   checked={Boolean(props.checked)}
                   disabled={false}
                   readOnly={false}
-                  onClick={() => toggleTaskAtLine(line)}
-                  onChange={() => {}}
+                  onChange={(event) => {
+                    event.preventDefault();
+                    let taskIndex = -1;
+                    if (Number.isFinite(offset)) {
+                      taskIndex = findTaskIndexByOffset(preparedSource, offset);
+                    } else if (Number.isFinite(lineFromNode)) {
+                      taskIndex = taskLineNumbers.findIndex((line) => line === lineFromNode);
+                    } else {
+                      taskIndex = fallbackTaskIndex;
+                    }
+                    toggleTaskAtIndex(taskIndex);
+                  }}
                 />
               );
             }
             return <input {...props} />;
           },
         }}
-      >
-        {prepareMarkdown(text)}
-      </ReactMarkdown>
+      />
     );
   };
 
@@ -419,7 +462,7 @@ export default function CardDetailPage() {
       </button>
       <button
         type="button"
-        onClick={() => insertLinePrefix('1. ')}
+        onClick={insertOrderedList}
         className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
         title="Numbered list"
         aria-label="Numbered list"
@@ -505,50 +548,62 @@ export default function CardDetailPage() {
   );
 
   const renderEditor = () => {
-    const lineCount = content.split('\n').length || 1;
+    const handleEditorChange = (nextValue?: string, event?: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const next = nextValue ?? '';
+      setContent(next);
+      if (event?.currentTarget) {
+        editorRef.current = event.currentTarget;
+      }
+      const el = editorRef.current;
+      if (!el) {
+        setShowMentions(false);
+        setMentionQuery('');
+        setMentionStart(null);
+        return;
+      }
+      const cursor = el.selectionStart ?? next.length;
+      const before = next.slice(0, cursor);
+      const match = before.match(/(^|\s)@([^\s@]*)$/);
+      if (match) {
+        const start = cursor - match[2].length - 1;
+        setMentionStart(start);
+        setMentionQuery(match[2]);
+        setShowMentions(true);
+        const coords = getCaretCoordinates(el, cursor);
+        const textRect = el.getBoundingClientRect();
+        setMentionPos({
+          top: textRect.top + coords.top + coords.height + 14,
+          left: textRect.left + coords.left,
+        });
+      } else {
+        setShowMentions(false);
+        setMentionQuery('');
+        setMentionStart(null);
+      }
+    };
+
     return (
-      <div className="flex h-full gap-3 overflow-y-auto">
-        <div className="select-none text-xs text-slate-400">
-          {Array.from({ length: lineCount }).map((_, idx) => (
-            <div key={idx} className="leading-5">
-              {idx + 1}
-            </div>
-          ))}
-        </div>
-        <textarea
-          ref={editorRef}
+      <div
+        data-color-mode="light"
+        className="[&_.w-md-editor]:min-h-[320px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-slate-200 [&_.w-md-editor]:bg-slate-50 [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-pre]:text-sm"
+      >
+        <MDEditor
           value={content}
-          onChange={(event) => {
-            const el = event.currentTarget;
-            el.style.height = 'auto';
-            el.style.height = `${el.scrollHeight}px`;
-            const nextValue = event.target.value;
-            setContent(nextValue);
-            const cursor = el.selectionStart ?? nextValue.length;
-            const before = nextValue.slice(0, cursor);
-            const match = before.match(/(^|\s)@([^\s@]*)$/);
-            if (match) {
-              const start = cursor - match[2].length - 1;
-              setMentionStart(start);
-              setMentionQuery(match[2]);
-              setShowMentions(true);
-              const coords = getCaretCoordinates(el, cursor);
-              const textRect = el.getBoundingClientRect();
-              setMentionPos({
-                top: textRect.top + coords.top + coords.height + 14,
-                left: textRect.left + coords.left,
-              });
-            } else {
-              setShowMentions(false);
-              setMentionQuery('');
-              setMentionStart(null);
-            }
+          onChange={handleEditorChange}
+          preview="edit"
+          hideToolbar
+          visibleDragbar={false}
+          height={360}
+          textareaProps={{
+            ref: editorRef,
+            placeholder: 'Write your markdown...',
+            onFocus: (event) => {
+              editorRef.current = event.currentTarget;
+            },
+            onBlur: () => {
+              setTimeout(() => setShowMentions(false), 100);
+            },
           }}
-          onBlur={() => {
-            setTimeout(() => setShowMentions(false), 100);
-          }}
-          className="w-full resize-none overflow-hidden border-0 bg-transparent px-0 py-1 text-sm text-slate-700 focus:outline-none"
-          placeholder="Write your markdown..."
         />
       </div>
     );

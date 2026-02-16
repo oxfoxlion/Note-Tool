@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "@uiw/react-md-editor/markdown-editor.css";
+@import "@uiw/react-markdown-preview/markdown.css";
 
 :root {
   --background: #ffffff;
@@ -197,6 +199,31 @@ body {
   padding: 0;
   color: inherit;
   font-size: 0.9rem;
+}
+
+/* Force dark code blocks in @uiw markdown preview */
+.wmde-markdown pre {
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+.wmde-markdown pre code {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+/* Normalize task-list checkbox layout for @uiw markdown preview */
+.prose .wmde-markdown .contains-task-list {
+  padding-left: 0;
+}
+
+.prose .wmde-markdown .contains-task-list li {
+  list-style: none;
+}
+
+.prose .wmde-markdown .contains-task-list input[type='checkbox'] {
+  margin: 0 0.5rem 0 0 !important;
+  vertical-align: middle;
 }
 
 .prose table {
