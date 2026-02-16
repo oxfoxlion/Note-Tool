@@ -595,7 +595,6 @@ export default function CardDetailPage() {
           visibleDragbar={false}
           height={360}
           textareaProps={{
-            ref: editorRef,
             placeholder: 'Write your markdown...',
             onFocus: (event) => {
               editorRef.current = event.currentTarget;

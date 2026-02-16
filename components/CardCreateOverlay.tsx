@@ -403,7 +403,6 @@ export default function CardCreateOverlay({
           visibleDragbar={false}
           height={280}
           textareaProps={{
-            ref: editorRef,
             placeholder: 'Write your markdown...',
             onFocus: (event) => {
               editorRef.current = event.currentTarget;

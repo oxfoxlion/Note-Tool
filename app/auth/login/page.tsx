@@ -47,15 +47,16 @@ export default function LoginPage() {
       }
 
       if (response.data.token) {
-        setMessage(response.data.message || 'Login successful! Redirecting to 2FA setup...');
+        setMessage(response.data.message || 'Login successful! Redirecting to boards...');
         setMessageType('success');
         localStorage.setItem('note_tool_token', response.data.token);
         if (response.data.userId) {
           localStorage.setItem('userId', response.data.userId);
         }
+        localStorage.removeItem('userId');
         setTimeout(() => {
-          router.push('/auth/2fa-setup');
-        }, 2000);
+          router.push('/boards');
+        }, 1200);
         return;
       }
 

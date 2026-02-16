@@ -118,6 +118,13 @@ export default function Setup2FAPage() {
           </Link>
           .
         </p>
+        <p className="text-sm text-gray-600">
+          Not now?{' '}
+          <Link href="/boards" className="font-medium text-indigo-600 hover:text-indigo-500">
+            Skip for now
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );
