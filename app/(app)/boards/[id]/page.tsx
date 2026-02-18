@@ -215,6 +215,13 @@ export default function BoardDetailPage() {
     setError('');
     const data = await createCardInBoard(boardId, payload);
     setCards((prev) => [data.card, ...prev]);
+    setAllCards((prev) => {
+      const exists = prev.some((item) => item.id === data.card.id);
+      if (exists) {
+        return prev.map((item) => (item.id === data.card.id ? data.card : item));
+      }
+      return [data.card, ...prev];
+    });
     setPositions((prev) => ({
       ...prev,
       [data.card.id]: {
@@ -269,6 +276,7 @@ export default function BoardDetailPage() {
     if (!selectedCard) return;
     const updated = await updateCard(selectedCard.id, payload);
     setCards((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    setAllCards((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     setSelectedCard(updated);
   };
 
@@ -831,6 +839,28 @@ export default function BoardDetailPage() {
     return `${window.location.origin}/shared-board/${token}`;
   };
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return copied;
+      } catch {
+        return false;
+      }
+    }
+  };
+
   const handleCreateShareLink = async () => {
     setShareError('');
     setShareBusy(true);
@@ -838,7 +868,10 @@ export default function BoardDetailPage() {
       const created = await createBoardShareLink(boardId, { permission: 'read' });
       setShareLinks((prev) => [created, ...prev]);
       const shareUrl = toShareUrl(created.token);
-      await navigator.clipboard.writeText(shareUrl);
+      const copied = await copyToClipboard(shareUrl);
+      if (!copied) {
+        setShareError('Link created, but auto-copy is unavailable in this browser.');
+      }
     } catch (err: unknown) {
       if (isUnauthorizedError(err)) {
         router.push('/auth/login');
@@ -1592,7 +1625,10 @@ export default function BoardDetailPage() {
                           <button
                             type="button"
                             onClick={async () => {
-                              await navigator.clipboard.writeText(shareUrl);
+                              const copied = await copyToClipboard(shareUrl);
+                              if (!copied) {
+                                setShareError('Copy failed in this browser. Please copy the URL manually.');
+                              }
                             }}
                             className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
                           >
