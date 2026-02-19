@@ -46,6 +46,7 @@ export default function BoardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const boardId = Number(params.id);
+  const toolbarStorageKey = 'note_tool_board_toolbar_visible';
   const [isMobile, setIsMobile] = useState(false);
   const [cards, setCards] = useState<Card[]>([]);
   const [positions, setPositions] = useState<Record<number, { x: number; y: number; width?: number | null }>>({});
@@ -62,7 +63,14 @@ export default function BoardDetailPage() {
   const [importQuery, setImportQuery] = useState('');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
-  const [showToolbar, setShowToolbar] = useState(false);
+  const [showToolbar, setShowToolbar] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(toolbarStorageKey) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [showBoardMenu, setShowBoardMenu] = useState(false);
   const [showRename, setShowRename] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -168,6 +176,14 @@ export default function BoardDetailPage() {
     media.addEventListener('change', handleChange);
     return () => media.removeEventListener('change', handleChange);
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(toolbarStorageKey, showToolbar ? '1' : '0');
+    } catch {
+      // Ignore storage errors in strict browser contexts
+    }
+  }, [showToolbar]);
 
   useEffect(() => {
     const load = async () => {
@@ -525,6 +541,32 @@ export default function BoardDetailPage() {
     return () => {
       document.body.style.overflow = prev;
     };
+  }, []);
+
+  useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName?.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select';
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (isTypingTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === 'v') {
+        setTool('pan');
+      } else if (key === 'e') {
+        setTool('add');
+      } else if (key === 'r') {
+        setTool('region');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -911,6 +953,14 @@ export default function BoardDetailPage() {
     }
   };
 
+  const cycleTool = () => {
+    setTool((prev) => {
+      if (prev === 'pan') return 'add';
+      if (prev === 'add') return 'region';
+      return 'pan';
+    });
+  };
+
   const focusCard = (cardId: number) => {
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1231,13 +1281,33 @@ export default function BoardDetailPage() {
               <button
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
+                onClick={cycleTool}
+                className="tool-btn flex h-10 w-10 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                title="Quick switch tool"
+                aria-label="Quick switch tool"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M7 7h10M13 3l4 4-4 4M17 17H7M11 13l-4 4 4 4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <div className="h-px w-6 bg-slate-200" />
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setTool('pan')}
                 className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
                   tool === 'pan'
                     ? 'border border-slate-200 bg-slate-100 text-slate-900'
                     : 'text-slate-600 hover:bg-slate-100'
                 } ${tool === 'pan' ? 'tool-active' : ''}`}
-                title="Pan"
+                title="View (V)"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                   <path
@@ -1258,7 +1328,7 @@ export default function BoardDetailPage() {
                     ? 'border border-slate-200 bg-slate-100 text-slate-900'
                     : 'text-slate-600 hover:bg-slate-100'
                 } ${tool === 'add' ? 'tool-active' : ''}`}
-                title="Edit"
+                title="Edit (E)"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                   <path
@@ -1279,7 +1349,7 @@ export default function BoardDetailPage() {
                     ? 'border border-slate-200 bg-slate-100 text-slate-900'
                     : 'text-slate-600 hover:bg-slate-100'
                 } ${tool === 'region' ? 'tool-active' : ''}`}
-                title="Draw region"
+                title="Region (R)"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                   <rect x="5" y="5" width="14" height="14" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
