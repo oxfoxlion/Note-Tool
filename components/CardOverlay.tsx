@@ -18,6 +18,9 @@ type CardOverlayProps = {
   onDelete?: () => Promise<void> | void;
   onRemoveFromBoard?: () => Promise<void> | void;
   allCards?: Card[];
+  readOnly?: boolean;
+  onNavigateCard?: (cardId: number) => void;
+  breadcrumbRootLabel?: string;
 };
 
 export default function CardOverlay({
@@ -28,6 +31,9 @@ export default function CardOverlay({
   onDelete,
   onRemoveFromBoard,
   allCards = [],
+  readOnly = false,
+  onNavigateCard,
+  breadcrumbRootLabel = 'Card Box',
 }: CardOverlayProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'view' | 'edit'>('view');
@@ -79,6 +85,7 @@ export default function CardOverlay({
   }, [mode]);
 
   const handleSave = async () => {
+    if (readOnly) return;
     setIsSaving(true);
     try {
       await onSave({ title, content });
@@ -89,6 +96,7 @@ export default function CardOverlay({
   };
 
   useEffect(() => {
+    if (readOnly) return;
     if (viewMode === 'view') return;
     if (title === lastSavedRef.current.title && content === lastSavedRef.current.content) return;
     if (autosaveTimerRef.current) {
@@ -109,7 +117,7 @@ export default function CardOverlay({
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [title, content, viewMode, onSave]);
+  }, [title, content, viewMode, onSave, readOnly]);
 
   const cardMap = useMemo(() => {
     const map = new Map<number, Card>();
@@ -292,13 +300,15 @@ export default function CardOverlay({
               const lineFromNode = Number(props?.node?.position?.start?.line);
               const fallbackTaskIndex = renderTaskIndex;
               renderTaskIndex += 1;
+              const isReadOnly = readOnly || viewMode === 'view';
               return (
                 <input
                   type="checkbox"
                   checked={Boolean(props.checked)}
-                  disabled={false}
-                  readOnly={false}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(event) => {
+                    if (isReadOnly) return;
                     event.preventDefault();
                     let taskIndex = -1;
                     if (Number.isFinite(offset)) {
@@ -536,6 +546,26 @@ export default function CardOverlay({
       ? 'w-full max-w-2xl rounded-2xl bg-white shadow-2xl'
       : 'h-full w-full overflow-y-auto';
 
+  const handleViewClickCapture = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest?.('a');
+    if (!anchor) return;
+    const href = anchor.getAttribute('href');
+    const match = href?.match(/^\/cards\/(\d+)(?:[/?#].*)?$/);
+    if (match) {
+      const cardId = Number(match[1]);
+      if (Number.isFinite(cardId)) {
+        event.preventDefault();
+        if (onNavigateCard) {
+          onNavigateCard(cardId);
+          return;
+        }
+      }
+    }
+    anchor.setAttribute('target', '_blank');
+    anchor.setAttribute('rel', 'noopener noreferrer');
+  };
+
   const overlay = (
     <div className={wrapperClass} role="dialog" aria-modal="true">
       {mode === 'modal' && (
@@ -550,68 +580,76 @@ export default function CardOverlay({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <nav className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-500">
             <button type="button" onClick={onClose} className="hover:text-slate-700">
-              Card Box
+              {breadcrumbRootLabel}
             </button>
             <span>/</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="w-28 border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 focus:outline-none sm:w-40"
-              placeholder="Untitled"
-            />
+            {readOnly ? (
+              <div className="w-28 truncate p-0 text-xs font-semibold text-slate-700 sm:w-40">{title || 'Untitled'}</div>
+            ) : (
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                className="w-28 border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 focus:outline-none sm:w-40"
+                placeholder="Untitled"
+              />
+            )}
           </nav>
           <div className="flex items-center gap-2">
-            <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setViewMode('edit')}
-                className={`rounded-full p-2 ${
-                  viewMode === 'edit' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                aria-label="Edit"
-                title="Edit"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path
-                    d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                  />
-                  <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('view')}
-                className={`rounded-full p-2 ${
-                  viewMode === 'view' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                aria-label="Preview"
-                title="Preview"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path
-                    d="M2.5 12c2.2-4.2 6.6-7 9.5-7s7.3 2.8 9.5 7c-2.2 4.2-6.6 7-9.5 7s-7.3-2.8-9.5-7z"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                  />
-                  <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                </svg>
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push(`/cards/${card.id}`)}
-              className="rounded-full border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
-              aria-label="Open full page"
-              title="Open full page"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                <path d="M7 3H3v4M21 7V3h-4M3 17v4h4M17 21h4v-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              </svg>
-            </button>
+            {!readOnly && (
+              <>
+                <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('edit')}
+                    className={`rounded-full p-2 ${
+                      viewMode === 'edit' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    aria-label="Edit"
+                    title="Edit"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path
+                        d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('view')}
+                    className={`rounded-full p-2 ${
+                      viewMode === 'view' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    aria-label="Preview"
+                    title="Preview"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path
+                        d="M2.5 12c2.2-4.2 6.6-7 9.5-7s7.3 2.8 9.5 7c-2.2 4.2-6.6 7-9.5 7s-7.3-2.8-9.5-7z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                      />
+                      <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/cards/${card.id}`)}
+                  className="rounded-full border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                  aria-label="Open full page"
+                  title="Open full page"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <path d="M7 3H3v4M21 7V3h-4M3 17v4h4M17 21h4v-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                </button>
+              </>
+            )}
             {onDelete && (
               <button
                 type="button"
@@ -648,7 +686,7 @@ export default function CardOverlay({
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-          {viewMode === 'edit' ? (
+          {!readOnly && viewMode === 'edit' ? (
             <div className="space-y-4">
               <input
                 value={title}
@@ -714,7 +752,7 @@ export default function CardOverlay({
               </div>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-6" onClickCapture={handleViewClickCapture}>
               <article className="prose max-w-none text-sm leading-relaxed text-slate-700">
                 {renderMarkdown(content || 'No content yet.')}
               </article>
@@ -731,6 +769,10 @@ export default function CardOverlay({
                       key={item.id}
                       type="button"
                       onClick={() => {
+                        if (onNavigateCard) {
+                          onNavigateCard(item.id);
+                          return;
+                        }
                         onClose();
                         router.push(`/cards/${item.id}`);
                       }}

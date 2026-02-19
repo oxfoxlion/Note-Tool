@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import CardOverlay from '../../../components/CardOverlay';
 import CardPreview from '../../../components/CardPreview';
 import { Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
 
@@ -17,11 +18,14 @@ type RegionView = {
 export default function SharedBoardPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
+  const modeStorageKey = 'note_tool_shared_card_open_mode';
   const [boardName, setBoardName] = useState('');
   const [cards, setCards] = useState<Card[]>([]);
   const [regions, setRegions] = useState<RegionView[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const viewportRef = useRef(viewport);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -47,6 +51,61 @@ export default function SharedBoardPage() {
   useEffect(() => {
     viewportRef.current = viewport;
   }, [viewport]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(modeStorageKey);
+      if (raw === 'modal' || raw === 'sidepanel') {
+        setCardOpenMode(raw);
+      }
+    } catch {
+      // Ignore storage errors in strict browser contexts
+    }
+  }, []);
+
+  const handleOpenModeChange = (mode: 'modal' | 'sidepanel') => {
+    setCardOpenMode(mode);
+    try {
+      window.localStorage.setItem(modeStorageKey, mode);
+    } catch {
+      // Ignore storage errors in strict browser contexts
+    }
+  };
+
+  const parseInternalCardId = (href: string | null): number | null => {
+    if (!href) return null;
+    const match = href.match(/^\/cards\/(\d+)(?:[/?#].*)?$/);
+    if (!match) return null;
+    const id = Number(match[1]);
+    return Number.isFinite(id) ? id : null;
+  };
+
+  const openCardById = (id: number) => {
+    const target = cards.find((item) => item.id === id) ?? null;
+    if (target) {
+      setSelectedCard(target);
+    }
+  };
+
+  const handleCardContentClick = (event: React.MouseEvent<HTMLElement>, fallbackCardId: number) => {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest?.('a');
+    if (!anchor) {
+      setSelectedCard(cards.find((item) => item.id === fallbackCardId) ?? null);
+      return;
+    }
+    const internalCardId = parseInternalCardId(anchor.getAttribute('href'));
+    if (internalCardId) {
+      event.preventDefault();
+      openCardById(internalCardId);
+      return;
+    }
+    const href = anchor.getAttribute('href');
+    if (href) {
+      event.preventDefault();
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const zoomAtClientPoint = (clientX: number, clientY: number, deltaY: number) => {
     const stage = stageRef.current;
@@ -217,6 +276,36 @@ export default function SharedBoardPage() {
           <div className="mt-1 text-xs text-slate-500">Read-only shared view</div>
         </div>
 
+        <div className="absolute right-6 top-6 z-30 flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => handleOpenModeChange('modal')}
+            className={`rounded-full p-2 ${
+              cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Open in modal"
+            aria-label="Open in modal"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+              <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleOpenModeChange('sidepanel')}
+            className={`rounded-full p-2 ${
+              cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Open in side panel"
+            aria-label="Open in side panel"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+              <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+              <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+          </button>
+        </div>
+
         <div className="absolute bottom-6 right-6 z-30 flex flex-col items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur">
           <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Zoom</div>
           <button
@@ -296,7 +385,9 @@ export default function SharedBoardPage() {
               return (
                 <div
                   key={card.id}
-                  className="pointer-events-none absolute"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => handleCardContentClick(event, card.id)}
+                  className="pointer-events-auto absolute"
                   style={{
                     transform: `translate(${x}px, ${y}px)`,
                     width: typeof card.width === 'number' ? card.width : 420,
@@ -308,6 +399,19 @@ export default function SharedBoardPage() {
             })}
           </div>
         </div>
+
+        {selectedCard && (
+          <CardOverlay
+            card={selectedCard}
+            mode={cardOpenMode}
+            onClose={() => setSelectedCard(null)}
+            onSave={() => {}}
+            allCards={cards}
+            readOnly
+            onNavigateCard={openCardById}
+            breadcrumbRootLabel={boardName || 'Shared Board'}
+          />
+        )}
       </div>
     </div>
   );

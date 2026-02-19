@@ -110,6 +110,26 @@ export default function BoardDetailPage() {
     lastX: number;
     lastY: number;
   } | null>(null);
+  const regionResizeRef = useRef<{
+    id: number;
+    pointerId: number;
+    startWidth: number;
+    startHeight: number;
+    startPointerX: number;
+    startPointerY: number;
+    latestWidth: number;
+    latestHeight: number;
+  } | null>(null);
+  const regionDragRef = useRef<{
+    id: number;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startPointerX: number;
+    startPointerY: number;
+    latestX: number;
+    latestY: number;
+  } | null>(null);
   const touchStateRef = useRef<{
     mode: 'pan' | 'pinch' | null;
     startX: number;
@@ -357,6 +377,7 @@ export default function BoardDetailPage() {
       if (!stageRef.current) return;
       const target = event.target as HTMLElement;
       if (target?.closest?.('[data-card="true"]')) return;
+      if (target?.closest?.('[data-region="true"]')) return;
       const touches = event.touches;
       if (tool === 'region' && touches.length === 1) {
         const rect = stage.getBoundingClientRect();
@@ -692,6 +713,132 @@ export default function BoardDetailPage() {
         return;
       }
       setRegionNameError('Failed to save region.');
+    }
+  };
+
+  const startRegionResize = (
+    event: React.PointerEvent<HTMLDivElement>,
+    regionId: number,
+    width: number,
+    height: number
+  ) => {
+    if (tool !== 'region') return;
+    event.stopPropagation();
+    regionResizeRef.current = {
+      id: regionId,
+      pointerId: event.pointerId,
+      startWidth: width,
+      startHeight: height,
+      startPointerX: event.clientX,
+      startPointerY: event.clientY,
+      latestWidth: width,
+      latestHeight: height,
+    };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const startRegionDrag = (
+    event: React.PointerEvent<HTMLDivElement>,
+    regionId: number,
+    x: number,
+    y: number
+  ) => {
+    if (tool !== 'region') return;
+    event.stopPropagation();
+    regionDragRef.current = {
+      id: regionId,
+      pointerId: event.pointerId,
+      startX: x,
+      startY: y,
+      startPointerX: event.clientX,
+      startPointerY: event.clientY,
+      latestX: x,
+      latestY: y,
+    };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const moveRegionDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const dragging = regionDragRef.current;
+    if (!dragging || dragging.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const scale = viewportRef.current.scale || 1;
+    const dx = (event.clientX - dragging.startPointerX) / scale;
+    const dy = (event.clientY - dragging.startPointerY) / scale;
+    const nextX = Math.round(dragging.startX + dx);
+    const nextY = Math.round(dragging.startY + dy);
+    dragging.latestX = nextX;
+    dragging.latestY = nextY;
+    setRegions((prev) =>
+      prev.map((region) => (region.id === dragging.id ? { ...region, x: nextX, y: nextY } : region))
+    );
+  };
+
+  const endRegionDrag = async (event: React.PointerEvent<HTMLDivElement>) => {
+    const dragging = regionDragRef.current;
+    if (!dragging || dragging.pointerId !== event.pointerId) return;
+    regionDragRef.current = null;
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
+    try {
+      const updated = await updateBoardRegion(boardId, dragging.id, {
+        x_pos: dragging.latestX,
+        y_pos: dragging.latestY,
+      });
+      const mapped = mapApiRegionToView(updated);
+      setRegions((prev) => prev.map((region) => (region.id === dragging.id ? mapped : region)));
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to save region position.');
+    }
+  };
+
+  const moveRegionResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resizing = regionResizeRef.current;
+    if (!resizing || resizing.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const scale = viewportRef.current.scale || 1;
+    const dx = (event.clientX - resizing.startPointerX) / scale;
+    const dy = (event.clientY - resizing.startPointerY) / scale;
+    const nextWidth = Math.max(40, Math.round(resizing.startWidth + dx));
+    const nextHeight = Math.max(30, Math.round(resizing.startHeight + dy));
+    resizing.latestWidth = nextWidth;
+    resizing.latestHeight = nextHeight;
+    setRegions((prev) =>
+      prev.map((region) =>
+        region.id === resizing.id ? { ...region, width: nextWidth, height: nextHeight } : region
+      )
+    );
+  };
+
+  const endRegionResize = async (event: React.PointerEvent<HTMLDivElement>) => {
+    const resizing = regionResizeRef.current;
+    if (!resizing || resizing.pointerId !== event.pointerId) return;
+    regionResizeRef.current = null;
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
+    try {
+      const updated = await updateBoardRegion(boardId, resizing.id, {
+        width: resizing.latestWidth,
+        height: resizing.latestHeight,
+      });
+      const mapped = mapApiRegionToView(updated);
+      setRegions((prev) => prev.map((region) => (region.id === resizing.id ? mapped : region)));
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to save region size.');
     }
   };
 
@@ -1206,21 +1353,33 @@ export default function BoardDetailPage() {
           ref={stageRef}
           onPointerDown={(event) => {
             if (tool === 'region') {
-              startRegionDraw(event);
+              if (event.button === 1) {
+                beginPan(event);
+              } else {
+                startRegionDraw(event);
+              }
               return;
             }
             beginPan(event);
           }}
           onPointerMove={(event) => {
             if (tool === 'region') {
-              moveRegionDraw(event);
+              if (regionDrawRef.current) {
+                moveRegionDraw(event);
+              } else {
+                movePan(event);
+              }
               return;
             }
             movePan(event);
           }}
           onPointerUp={(event) => {
             if (tool === 'region') {
-              endRegionDraw(event);
+              if (regionDrawRef.current) {
+                endRegionDraw(event);
+              } else {
+                endPan(event);
+              }
               return;
             }
             endPan(event);
@@ -1250,7 +1409,14 @@ export default function BoardDetailPage() {
             {regions.map((region) => (
               <div
                 key={region.id}
-                className="absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10 pointer-events-none"
+                data-region="true"
+                onPointerDown={(event) => startRegionDrag(event, region.id, region.x, region.y)}
+                onPointerMove={moveRegionDrag}
+                onPointerUp={endRegionDrag}
+                onPointerCancel={endRegionDrag}
+                className={`absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10 ${
+                  tool === 'region' ? 'pointer-events-auto cursor-move' : 'pointer-events-none'
+                }`}
                 style={{
                   transform: `translate(${region.x}px, ${region.y}px)`,
                   width: region.width,
@@ -1301,6 +1467,18 @@ export default function BoardDetailPage() {
                     </button>
                   </div>
                 </div>
+                {tool === 'region' && (
+                  <div
+                    data-region-resize-handle="true"
+                    onPointerDown={(event) => startRegionResize(event, region.id, region.width, region.height)}
+                    onPointerMove={moveRegionResize}
+                    onPointerUp={endRegionResize}
+                    onPointerCancel={endRegionResize}
+                    className="pointer-events-auto absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-nwse-resize rounded-sm border border-sky-600 bg-sky-500 shadow-sm"
+                    title="Resize region"
+                    aria-label="Resize region"
+                  />
+                )}
               </div>
             ))}
             {draftRegion && (
@@ -1401,6 +1579,7 @@ export default function BoardDetailPage() {
           onSave={handleSave}
           onRemoveFromBoard={handleRemoveFromBoard}
           allCards={allCards}
+          breadcrumbRootLabel={boardName || 'Board'}
         />
       )}
 
