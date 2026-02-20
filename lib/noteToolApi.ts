@@ -6,10 +6,107 @@ const api = axios.create({
   withCredentials: true,
 });
 
+type RetryableRequestConfig = {
+  _retry?: boolean;
+  headers?: Record<string, string>;
+  url?: string;
+};
+
+function readAccessToken() {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem('note_tool_token') || '';
+  } catch (error) {
+    console.warn('Failed to read auth token:', error);
+    return '';
+  }
+}
+
+function writeAccessToken(token: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('note_tool_token', token);
+  } catch (error) {
+    console.warn('Failed to write auth token:', error);
+  }
+}
+
+function clearAccessToken() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('note_tool_token');
+  } catch (error) {
+    console.warn('Failed to clear auth token:', error);
+  }
+}
+
+function clearAuthLocalState() {
+  if (typeof window === 'undefined') return;
+  clearAccessToken();
+  try {
+    localStorage.removeItem('userId');
+  } catch (error) {
+    console.warn('Failed to clear user state:', error);
+  }
+}
+
+let hasHandledAuthExpired = false;
+
+function handleAuthExpired() {
+  if (typeof window === 'undefined' || hasHandledAuthExpired) return;
+  hasHandledAuthExpired = true;
+  clearAuthLocalState();
+  const isAuthPage = window.location.pathname.startsWith('/auth/');
+  if (!isAuthPage) {
+    window.alert('登入已過期，請重新登入。');
+  }
+  window.location.assign('/auth/login');
+}
+
+let refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = api
+    .post('/note_tool/auth/refresh')
+    .then((response) => {
+      const nextToken = response.data?.token;
+      if (!nextToken || typeof nextToken !== 'string') {
+        throw new Error('Refresh token response missing token');
+      }
+      writeAccessToken(nextToken);
+      return nextToken;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+  return refreshPromise;
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
+  async (error) => {
+    const status = error?.response?.status;
+    const originalRequest = (error?.config || {}) as RetryableRequestConfig;
+    const isRefreshRequest = (originalRequest.url || '').includes('/note_tool/auth/refresh');
+
+    if (status === 401 && !isRefreshRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const nextToken = await refreshAccessToken();
+        originalRequest.headers = {
+          ...(originalRequest.headers || {}),
+          Authorization: `Bearer ${nextToken}`,
+        };
+        return api.request(originalRequest);
+      } catch {
+        handleAuthExpired();
+        return Promise.reject(new Error('UNAUTHORIZED'));
+      }
+    }
+
+    if (status === 401) {
+      handleAuthExpired();
       return Promise.reject(new Error('UNAUTHORIZED'));
     }
     return Promise.reject(error);
@@ -17,13 +114,7 @@ api.interceptors.response.use(
 );
 
 function authHeaders() {
-  if (typeof window === 'undefined') return {};
-  let token = '';
-  try {
-    token = localStorage.getItem('note_tool_token') || '';
-  } catch (error) {
-    console.warn('Failed to read auth token:', error);
-  }
+  const token = readAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
