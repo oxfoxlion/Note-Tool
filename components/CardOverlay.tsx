@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MDEditor from '@uiw/react-md-editor';
 import { createPortal } from 'react-dom';
@@ -9,6 +9,11 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
 import type { Card } from '../lib/noteToolApi';
+import { useCardShare } from '../hooks/useCardShare';
+import { useCardBoardMembership } from '../hooks/useCardBoardMembership';
+import CardActionsMenu from './cards/CardActionsMenu';
+import CardShareLinksModal from './cards/CardShareLinksModal';
+import CardRemoveFromBoardModal from './cards/CardRemoveFromBoardModal';
 
 type CardOverlayProps = {
   card: Card;
@@ -16,7 +21,7 @@ type CardOverlayProps = {
   onClose: () => void;
   onSave: (next: { title: string; content: string }) => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
-  onRemoveFromBoard?: () => Promise<void> | void;
+  onRemoveFromBoard?: (boardId: number, cardId: number) => Promise<void> | void;
   allCards?: Card[];
   readOnly?: boolean;
   onNavigateCard?: (cardId: number) => void;
@@ -46,12 +51,15 @@ export default function CardOverlay({
     content: card.content ?? '',
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [showCardMenu, setShowCardMenu] = useState(false);
   const [mounted, setMounted] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [showMentions, setShowMentions] = useState(false);
+
+  const share = useCardShare(card.id);
+  const removeMembership = useCardBoardMembership(card.id);
 
   useEffect(() => {
     setTitle(card.title);
@@ -61,7 +69,8 @@ export default function CardOverlay({
     setShowMentions(false);
     setMentionQuery('');
     setMentionStart(null);
-  }, [card.id]);
+    setShowCardMenu(false);
+  }, [card.id, card.title, card.content]);
 
   useEffect(() => {
     setMounted(true);
@@ -83,17 +92,6 @@ export default function CardOverlay({
       (root as HTMLElement).style.removeProperty('--sidepanel-width');
     };
   }, [mode]);
-
-  const handleSave = async () => {
-    if (readOnly) return;
-    setIsSaving(true);
-    try {
-      await onSave({ title, content });
-      setViewMode('view');
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   useEffect(() => {
     if (readOnly) return;
@@ -294,10 +292,20 @@ export default function CardOverlay({
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
         components={{
-          input: ({ ...props }: any) => {
+          input: ({ ...props }: Record<string, unknown>) => {
             if (props.type === 'checkbox') {
-              const offset = Number(props?.node?.position?.start?.offset);
-              const lineFromNode = Number(props?.node?.position?.start?.line);
+              const node = props.node as
+                | {
+                    position?: {
+                      start?: {
+                        offset?: number;
+                        line?: number;
+                      };
+                    };
+                  }
+                | undefined;
+              const offset = Number(node?.position?.start?.offset);
+              const lineFromNode = Number(node?.position?.start?.line);
               const fallbackTaskIndex = renderTaskIndex;
               renderTaskIndex += 1;
               const isReadOnly = readOnly || viewMode === 'view';
@@ -566,6 +574,36 @@ export default function CardOverlay({
     anchor.setAttribute('rel', 'noopener noreferrer');
   };
 
+  const handleOpenShareMenu = useCallback(() => {
+    setShowCardMenu(false);
+    void share.openShare();
+  }, [share]);
+
+  const handleOpenRemoveMenu = useCallback(() => {
+    setShowCardMenu(false);
+    void removeMembership.openRemovePicker();
+  }, [removeMembership]);
+
+  const actionItems = [
+    { id: 'share', label: 'Share card', onClick: handleOpenShareMenu },
+    ...(onRemoveFromBoard
+      ? [{ id: 'remove', label: 'Remove from board', onClick: handleOpenRemoveMenu }]
+      : []),
+    ...(onDelete
+      ? [
+          {
+            id: 'delete',
+            label: 'Delete card',
+            tone: 'danger' as const,
+            onClick: () => {
+              setShowCardMenu(false);
+              setShowDeleteConfirm(true);
+            },
+          },
+        ]
+      : []),
+  ];
+
   const overlay = (
     <div className={wrapperClass} role="dialog" aria-modal="true">
       {mode === 'modal' && (
@@ -650,27 +688,13 @@ export default function CardOverlay({
                 </button>
               </>
             )}
-            {onDelete && (
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="rounded-full border border-rose-200 px-3 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
-              >
-                Delete
-              </button>
-            )}
-            {onRemoveFromBoard && (
-              <button
-                type="button"
-                onClick={() => setShowRemoveConfirm(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
-                aria-label="Remove from board"
-                title="Remove from board"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path d="M4 12h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </button>
+            {(onDelete || onRemoveFromBoard) && (
+              <CardActionsMenu
+                open={showCardMenu}
+                onToggle={() => setShowCardMenu((prev) => !prev)}
+                onClose={() => setShowCardMenu(false)}
+                actions={actionItems}
+              />
             )}
             <button
               type="button"
@@ -789,36 +813,50 @@ export default function CardOverlay({
         </div>
       </div>
 
-      {showRemoveConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Confirm</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Remove from board?</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              This will remove the card from this board only.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRemoveConfirm(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRemoveConfirm(false);
-                  onRemoveFromBoard?.();
-                }}
-                className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CardShareLinksModal
+        open={share.showShare}
+        links={share.shareLinks}
+        busy={share.shareBusy}
+        error={share.shareError}
+        toShareUrl={share.toShareUrl}
+        onClose={share.closeShare}
+        onCreate={share.createShareLink}
+        onCopy={async (url) => {
+          const copied = await share.copyToClipboard(url);
+          if (!copied) {
+            share.setShareError('Copy failed in this browser. Please copy the URL manually.');
+          }
+        }}
+        onRevoke={share.revokeShareLink}
+      />
+
+      <CardRemoveFromBoardModal
+        open={removeMembership.showRemovePicker}
+        cardTitle={card.title}
+        boards={removeMembership.removeBoards}
+        busyBoardId={removeMembership.removeBusyBoardId}
+        error={removeMembership.removeError}
+        onClose={removeMembership.closeRemovePicker}
+        onRemove={async (boardId) => {
+          if (!onRemoveFromBoard) return;
+          removeMembership.setRemoveError('');
+          removeMembership.setRemoveBusyBoardId(boardId);
+          try {
+            await onRemoveFromBoard(boardId, card.id);
+            removeMembership.setRemoveBoards((prev) => prev.filter((board) => board.id !== boardId));
+          } catch (err: unknown) {
+            const message =
+              (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+              'Failed to remove from board.';
+            removeMembership.setRemoveError(message);
+            return;
+          } finally {
+            removeMembership.setRemoveBusyBoardId(null);
+          }
+          removeMembership.closeRemovePicker();
+          onClose();
+        }}
+      />
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">

@@ -140,6 +140,11 @@ export type Board = {
   card_count?: number;
 };
 
+export type BoardSummary = {
+  id: number;
+  name: string;
+};
+
 export type BoardRegion = {
   id: number;
   board_id: number;
@@ -163,10 +168,29 @@ export type BoardShareLink = {
   created_at: string;
 };
 
+export type CardShareLink = {
+  id: number;
+  card_id: number;
+  token: string;
+  permission: 'read' | 'edit';
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by: string;
+  created_at: string;
+};
+
 export type SharedBoardPayload = {
   board: Board;
   cards: Card[];
   regions: BoardRegion[];
+  share: {
+    permission: 'read' | 'edit';
+    expires_at: string | null;
+  };
+};
+
+export type SharedCardPayload = {
+  card: Card;
   share: {
     permission: 'read' | 'edit';
     expires_at: string | null;
@@ -196,6 +220,35 @@ export async function updateCard(cardId: number, payload: { title: string; conte
 
 export async function deleteCard(cardId: number) {
   await api.delete(`/note_tool/card/${cardId}`, { headers: authHeaders() });
+}
+
+export async function getCardShareLinks(cardId: number): Promise<CardShareLink[]> {
+  const { data } = await api.get(`/note_tool/card/${cardId}/share-links`, { headers: authHeaders() });
+  return data;
+}
+
+export async function getCardBoards(cardId: number): Promise<BoardSummary[]> {
+  const { data } = await api.get(`/note_tool/card/${cardId}/boards`, { headers: authHeaders() });
+  return data;
+}
+
+export async function createCardShareLink(
+  cardId: number,
+  payload?: { permission?: 'read' | 'edit'; expires_in_days?: number }
+) {
+  const { data } = await api.post(`/note_tool/card/${cardId}/share-links`, payload ?? {}, {
+    headers: authHeaders(),
+  });
+  return data as CardShareLink;
+}
+
+export async function revokeCardShareLink(cardId: number, shareLinkId: number) {
+  await api.delete(`/note_tool/card/${cardId}/share-links/${shareLinkId}`, { headers: authHeaders() });
+}
+
+export async function getSharedCardByToken(token: string): Promise<SharedCardPayload> {
+  const { data } = await api.get(`/note_tool/card/share/${encodeURIComponent(token)}`);
+  return data;
 }
 
 export async function getBoards(): Promise<Board[]> {

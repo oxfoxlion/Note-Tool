@@ -316,10 +316,27 @@ export default function BoardDetailPage() {
     setSelectedCard(updated);
   };
 
-  const handleRemoveFromBoard = async () => {
+  const handleRemoveFromBoard = async (targetBoardId: number, targetCardId: number) => {
+    await removeCardFromBoard(targetBoardId, targetCardId);
+    const normalizedBoardId = Number(targetBoardId);
+    const normalizedCurrentBoardId = Number(boardId);
+    const normalizedCardId = Number(targetCardId);
+    if (normalizedBoardId === normalizedCurrentBoardId) {
+      setCards((prev) => prev.filter((item) => Number(item.id) !== normalizedCardId));
+      setPositions((prev) => {
+        const next = { ...prev };
+        delete next[normalizedCardId];
+        return next;
+      });
+      setSelectedCard((prev) => (Number(prev?.id) === normalizedCardId ? null : prev));
+    }
+  };
+
+  const handleDeleteSelectedCard = async () => {
     if (!selectedCard) return;
-    await removeCardFromBoard(boardId, selectedCard.id);
+    await deleteCard(selectedCard.id);
     setCards((prev) => prev.filter((item) => item.id !== selectedCard.id));
+    setAllCards((prev) => prev.filter((item) => item.id !== selectedCard.id));
     setPositions((prev) => {
       const next = { ...prev };
       delete next[selectedCard.id];
@@ -655,7 +672,10 @@ export default function BoardDetailPage() {
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const dragging = dragRef.current;
     dragRef.current = null;
-    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
     if (dragging) {
       const pos = positions[dragging.id];
       if (pos) {
@@ -1575,6 +1595,7 @@ export default function BoardDetailPage() {
                   onPointerDown={(event) => beginDrag(event, card.id)}
                   onPointerMove={moveDrag}
                   onPointerUp={endDrag}
+                  onPointerCancel={endDrag}
                   onDoubleClick={() => {
                     if (isMobile) {
                       router.push(`/cards/${card.id}?boardId=${boardId}`);
@@ -1647,6 +1668,7 @@ export default function BoardDetailPage() {
           mode={cardOpenMode}
           onClose={() => setSelectedCard(null)}
           onSave={handleSave}
+          onDelete={handleDeleteSelectedCard}
           onRemoveFromBoard={handleRemoveFromBoard}
           allCards={allCards}
           breadcrumbRootLabel={boardName || 'Board'}

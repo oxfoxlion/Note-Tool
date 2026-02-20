@@ -16,6 +16,7 @@ import {
   getUserSettings,
   updateCard,
   updateUserSettings,
+  removeCardFromBoard,
 } from '../../../lib/noteToolApi';
 
 export default function CardsPage() {
@@ -72,8 +73,8 @@ export default function CardsPage() {
         if (typeof settingsData?.cardPreviewLength === 'number') {
           setCardPreviewLength(settingsData.cardPreviewLength);
         }
-      } catch (err: any) {
-        if (err?.message === 'UNAUTHORIZED') {
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
           return;
         }
@@ -92,7 +93,7 @@ export default function CardsPage() {
       try {
         const data = await getBoard(Number(boardFilter));
         setCards(data.cards);
-      } catch (err) {
+      } catch {
         setError('Failed to load board cards.');
       }
     };
@@ -137,6 +138,13 @@ export default function CardsPage() {
     setSelectedCard(null);
   };
 
+  const handleRemoveFromBoardById = async (targetBoardId: number, cardId: number) => {
+    await removeCardFromBoard(targetBoardId, cardId);
+    if (boardFilter && Number(boardFilter) === targetBoardId) {
+      setCards((prev) => prev.filter((item) => item.id !== cardId));
+    }
+  };
+
   const boardTitle = boardFilter
     ? boards.find((board) => String(board.id) === boardFilter)?.name || 'Selected board'
     : 'All cards';
@@ -149,7 +157,7 @@ export default function CardsPage() {
     setCardOpenMode(mode);
     try {
       await updateUserSettings({ cardOpenMode: mode });
-    } catch (err) {
+    } catch {
       setError('Failed to update view mode.');
     }
   };
@@ -295,18 +303,19 @@ export default function CardsPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filteredCards.map((card) => (
-          <CardPreview
-            key={card.id}
-            card={card}
-            previewLength={50}
-            onSelect={() => {
-              if (isMobile) {
-                router.push(`/cards/${card.id}`);
-                return;
-              }
-              setSelectedCard(card);
-            }}
-          />
+          <div key={card.id}>
+            <CardPreview
+              card={card}
+              previewLength={cardPreviewLength}
+              onSelect={() => {
+                if (isMobile) {
+                  router.push(`/cards/${card.id}`);
+                  return;
+                }
+                setSelectedCard(card);
+              }}
+            />
+          </div>
         ))}
       </section>
 
@@ -317,6 +326,9 @@ export default function CardsPage() {
           onClose={() => setSelectedCard(null)}
           onSave={handleSave}
           onDelete={handleDelete}
+          onRemoveFromBoard={async (targetBoardId, targetCardId) => {
+            await handleRemoveFromBoardById(targetBoardId, targetCardId);
+          }}
           allCards={allCards}
         />
       )}
