@@ -5,10 +5,22 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../../../lib/markdownSanitize';
+import type { InputHTMLAttributes } from 'react';
 
 type CardMarkdownPreviewProps = {
   text: string;
   onToggleTaskAtIndex: (index: number) => void;
+};
+
+type MarkdownInputProps = InputHTMLAttributes<HTMLInputElement> & {
+  node?: {
+    position?: {
+      start?: {
+        offset?: number;
+        line?: number;
+      };
+    };
+  };
 };
 
 const findTaskIndexByOffset = (source: string, offset: number) => {
@@ -41,18 +53,8 @@ export default function CardMarkdownPreview({ text, onToggleTaskAtIndex }: CardM
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
       components={{
-        input: ({ ...props }: Record<string, unknown>) => {
+        input: ({ node, ...props }: MarkdownInputProps) => {
           if (props.type === 'checkbox') {
-            const node = props.node as
-              | {
-                  position?: {
-                    start?: {
-                      offset?: number;
-                      line?: number;
-                    };
-                  };
-                }
-              | undefined;
             const offset = Number(node?.position?.start?.offset);
             const lineFromNode = Number(node?.position?.start?.line);
             return (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { InputHTMLAttributes } from 'react';
 import { useRouter } from 'next/navigation';
 import MDEditor from '@uiw/react-md-editor';
 import { createPortal } from 'react-dom';
@@ -26,6 +27,17 @@ type CardOverlayProps = {
   readOnly?: boolean;
   onNavigateCard?: (cardId: number) => void;
   breadcrumbRootLabel?: string;
+};
+
+type MarkdownInputProps = InputHTMLAttributes<HTMLInputElement> & {
+  node?: {
+    position?: {
+      start?: {
+        offset?: number;
+        line?: number;
+      };
+    };
+  };
 };
 
 export default function CardOverlay({
@@ -292,18 +304,8 @@ export default function CardOverlay({
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
         components={{
-          input: ({ ...props }: Record<string, unknown>) => {
+          input: ({ node, ...props }: MarkdownInputProps) => {
             if (props.type === 'checkbox') {
-              const node = props.node as
-                | {
-                    position?: {
-                      start?: {
-                        offset?: number;
-                        line?: number;
-                      };
-                    };
-                  }
-                | undefined;
               const offset = Number(node?.position?.start?.offset);
               const lineFromNode = Number(node?.position?.start?.line);
               const fallbackTaskIndex = renderTaskIndex;

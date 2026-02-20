@@ -15,6 +15,7 @@ import {
   createCardInBoard,
   deleteBoardRegion,
   deleteBoard,
+  deleteCard,
   getBoardShareLinks,
   getBoard,
   getBoardRegions,
