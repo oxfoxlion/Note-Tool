@@ -1,4 +1,4 @@
-# SDD — Note Tool Frontend (Cards + Boards)
+# SDD — Mipun Frontend (Cards + Boards)
 
 **1. 目標**
 1. 卡片 CRUD（Markdown）

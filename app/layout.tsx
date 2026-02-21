@@ -13,8 +13,8 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Note Tool",
-  description: "Markdown notes with cards and boards",
+  title: "Mipun | Shao",
+  description: "Connect the Mind, Punch the Memory.",
 };
 
 export default function RootLayout({

@@ -70,7 +70,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           />
         )}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 shrink-0 overflow-hidden transition-all duration-300 lg:static lg:z-auto ${
+          className={`fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col overflow-hidden transition-all duration-300 lg:static lg:z-auto ${
             collapsed ? 'w-0 lg:w-0' : 'w-full lg:w-64'
           }`}
           style={{ background: 'var(--sidebar-bg)', color: 'var(--sidebar-fg)' }}
@@ -79,9 +79,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.3em]" style={{ color: 'var(--sidebar-muted)' }}>
-                  {collapsed ? 'NT' : 'Note Tool'}
+                  {collapsed ? 'MP' : 'Mipun'}
                 </div>
-                {!collapsed && <div className="mt-2 text-2xl font-semibold tracking-tight">Shao Lab</div>}
               </div>
               <button
                 type="button"
@@ -123,10 +122,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             ))}
           </nav>
-          <div className="mt-auto px-4 pb-6 pt-10">
+          <div className="px-4 pb-6 pt-10">
             {!collapsed && (
               <div className="text-xs" style={{ color: 'var(--sidebar-muted)' }}>
-                Markdown-ready notes and boards.
+                Connect the Mind, Punch the Memory.
               </div>
             )}
             <button
@@ -139,6 +138,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               {collapsed ? '⏻' : 'Logout'}
             </button>
           </div>
+          {!collapsed && (
+            <div
+              className="mt-auto border-t border-slate-700/40 px-4 pb-6 pt-4 text-center text-[11px] tracking-[0.08em]"
+              style={{ color: 'var(--sidebar-muted)' }}
+            >
+              InstantCheese Shao
+            </div>
+          )}
         </aside>
         {collapsed && (
           <button

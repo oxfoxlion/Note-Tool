@@ -1,4 +1,4 @@
-# Note Tool Frontend
+# Mipun Frontend
 
 `note_tool` 是 Note/Board 前端，使用 Next.js App Router，提供卡片管理、白板排版、卡片分享與關聯編輯能力。
 
