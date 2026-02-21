@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardPreview from '../../../components/CardPreview';
+import StatusPage from '../../../components/StatusPage';
 import { Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
 
 type RegionView = {
@@ -23,7 +24,7 @@ export default function SharedBoardPage() {
   const [boardName, setBoardName] = useState('');
   const [cards, setCards] = useState<Card[]>([]);
   const [regions, setRegions] = useState<RegionView[]>([]);
-  const [error, setError] = useState('');
+  const [errorKind, setErrorKind] = useState<'not_found' | 'expired' | 'unknown' | ''>('');
   const [loading, setLoading] = useState(true);
   const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -255,7 +256,15 @@ export default function SharedBoardPage() {
           router.replace(`/shared-board/${encodeURIComponent(token)}/unlock`);
           return;
         }
-        setError('This share link is invalid or expired.');
+        if (status === 404) {
+          setErrorKind('not_found');
+          return;
+        }
+        if (status === 410) {
+          setErrorKind('expired');
+          return;
+        }
+        setErrorKind('unknown');
       } finally {
         setLoading(false);
       }
@@ -274,8 +283,22 @@ export default function SharedBoardPage() {
     return <div className="p-8 text-sm text-slate-500">Loading shared board...</div>;
   }
 
-  if (error) {
-    return <div className="p-8 text-sm text-rose-600">{error}</div>;
+  if (errorKind === 'not_found') {
+    return <StatusPage code="404" title="Share link not found" description="This share link does not exist." />;
+  }
+
+  if (errorKind === 'expired') {
+    return (
+      <StatusPage
+        code="410"
+        title="Share link expired"
+        description="This share link has expired or is no longer available."
+      />
+    );
+  }
+
+  if (errorKind === 'unknown') {
+    return <StatusPage title="Unable to open link" description="Failed to open this share link. Please try again later." />;
   }
 
   return (

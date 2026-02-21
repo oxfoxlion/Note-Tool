@@ -8,6 +8,7 @@ import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../../../lib/markdownSanitize';
 import { Card, getSharedCardByToken } from '../../../lib/noteToolApi';
+import StatusPage from '../../../components/StatusPage';
 
 type SharedCardClientProps = {
   token: string;
@@ -16,7 +17,7 @@ type SharedCardClientProps = {
 export default function SharedCardClient({ token }: SharedCardClientProps) {
   const router = useRouter();
   const [card, setCard] = useState<Card | null>(null);
-  const [error, setError] = useState('');
+  const [errorKind, setErrorKind] = useState<'not_found' | 'expired' | 'unknown' | ''>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,7 +32,15 @@ export default function SharedCardClient({ token }: SharedCardClientProps) {
           router.replace(`/shared-card/${encodeURIComponent(token)}/unlock`);
           return;
         }
-        setError('This share link is invalid or expired.');
+        if (status === 404) {
+          setErrorKind('not_found');
+          return;
+        }
+        if (status === 410) {
+          setErrorKind('expired');
+          return;
+        }
+        setErrorKind('unknown');
       } finally {
         setLoading(false);
       }
@@ -51,12 +60,26 @@ export default function SharedCardClient({ token }: SharedCardClientProps) {
     return <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading...</div>;
   }
 
-  if (error) {
-    return <div className="flex min-h-screen items-center justify-center px-4 text-sm text-rose-600">{error}</div>;
+  if (errorKind === 'not_found') {
+    return <StatusPage code="404" title="Share link not found" description="This share link does not exist." />;
+  }
+
+  if (errorKind === 'expired') {
+    return (
+      <StatusPage
+        code="410"
+        title="Share link expired"
+        description="This share link has expired or is no longer available."
+      />
+    );
+  }
+
+  if (errorKind === 'unknown') {
+    return <StatusPage title="Unable to open link" description="Failed to open this share link. Please try again later." />;
   }
 
   if (!card) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Card not found.</div>;
+    return <StatusPage code="404" title="Card not found" description="The shared card could not be found." />;
   }
 
   return (
