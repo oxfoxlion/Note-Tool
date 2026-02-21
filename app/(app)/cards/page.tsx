@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardCreateOverlay from '../../../components/CardCreateOverlay';
@@ -44,6 +44,9 @@ export default function CardsPage() {
     const handleChange = () => {
       setIsMobile(mediaMobile.matches);
       setIsXl(mediaXl.matches);
+      if (mediaMobile.matches) {
+        setCardOpenMode('sidepanel');
+      }
     };
     handleChange();
     mediaMobile.addEventListener('change', handleChange);
@@ -184,6 +187,18 @@ export default function CardsPage() {
       setError('Failed to update view mode.');
     }
   };
+
+  const handleNavigateOverlayCard = useCallback(
+    (targetCardId: number) => {
+      const target = allCards.find((item) => item.id === targetCardId) ?? cards.find((item) => item.id === targetCardId);
+      if (target) {
+        setSelectedCard(target);
+        return;
+      }
+      router.push(`/cards/${targetCardId}`);
+    },
+    [allCards, cards, router]
+  );
 
   return (
     <div className="space-y-8">
@@ -386,6 +401,7 @@ export default function CardsPage() {
             await handleRemoveFromBoardById(targetBoardId, targetCardId);
           }}
           allCards={allCards}
+          onNavigateCard={handleNavigateOverlayCard}
         />
       )}
 

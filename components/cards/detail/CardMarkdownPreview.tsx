@@ -10,6 +10,7 @@ import type { InputHTMLAttributes } from 'react';
 type CardMarkdownPreviewProps = {
   text: string;
   onToggleTaskAtIndex: (index: number) => void;
+  onOpenCard?: (id: number) => void;
 };
 
 type MarkdownInputProps = InputHTMLAttributes<HTMLInputElement> & {
@@ -39,7 +40,7 @@ const findTaskIndexByOffset = (source: string, offset: number) => {
 
 const prepareMarkdown = (text: string) => text.replace(/@\[\[(\d+)\|([^\]]+)\]\]/g, '[@$2](/cards/$1)');
 
-export default function CardMarkdownPreview({ text, onToggleTaskAtIndex }: CardMarkdownPreviewProps) {
+export default function CardMarkdownPreview({ text, onToggleTaskAtIndex, onOpenCard }: CardMarkdownPreviewProps) {
   const preparedSource = prepareMarkdown(text);
   const taskLineNumbers = text
     .split('\n')
@@ -53,6 +54,31 @@ export default function CardMarkdownPreview({ text, onToggleTaskAtIndex }: CardM
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
       components={{
+        a: ({ href, children, ...props }) => {
+          const match = href?.match(/^\/cards\/(\d+)(?:[/?#].*)?$/);
+          if (match && onOpenCard) {
+            return (
+              <a
+                {...props}
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  const id = Number(match[1]);
+                  if (Number.isFinite(id)) {
+                    onOpenCard(id);
+                  }
+                }}
+              >
+                {children}
+              </a>
+            );
+          }
+          return (
+            <a {...props} href={href} target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          );
+        },
         input: ({ node, ...props }: MarkdownInputProps) => {
           if (props.type === 'checkbox') {
             const offset = Number(node?.position?.start?.offset);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCardDetailState } from '../../../../hooks/useCardDetailState';
@@ -26,6 +26,9 @@ export default function CardDetailPage() {
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [showCardMenu, setShowCardMenu] = useState(false);
   const activeViewMode = isMobile && viewMode === 'split' ? 'view' : viewMode;
+  const pageContainerClassName = isMobile
+    ? 'flex h-[calc(100dvh-6rem)] min-h-0 flex-col gap-4 overflow-hidden'
+    : 'flex h-[calc(100vh-6rem)] flex-col gap-6 overflow-hidden';
 
   const boardId = useMemo(() => {
     const raw = searchParams.get('boardId');
@@ -33,10 +36,14 @@ export default function CardDetailPage() {
     return Number.isFinite(parsed) ? (parsed as number) : null;
   }, [searchParams]);
 
+  const handleUnauthorized = useCallback(() => {
+    router.push('/auth/login');
+  }, [router]);
+
   const { card, allCards, title, setTitle, content, setContent, isSaving, error } = useCardDetailState({
     cardId,
     autosaveEnabled: activeViewMode !== 'view',
-    onUnauthorized: () => router.push('/auth/login'),
+    onUnauthorized: handleUnauthorized,
   });
 
   useEffect(() => {
@@ -54,7 +61,7 @@ export default function CardDetailPage() {
     card,
     boardId,
     closeMenu: () => setShowCardMenu(false),
-    onUnauthorized: () => router.push('/auth/login'),
+    onUnauthorized: handleUnauthorized,
     onDeleted: () => router.push('/cards'),
     onNavigateBoard: (targetBoardId) => router.push(`/boards/${targetBoardId}`),
   });
@@ -84,7 +91,7 @@ export default function CardDetailPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] flex-col gap-6 overflow-hidden">
+    <div className={pageContainerClassName}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <nav className="flex items-center gap-2 text-xs font-medium text-slate-500">
           <Link href="/cards" className="hover:text-slate-700">
@@ -105,6 +112,7 @@ export default function CardDetailPage() {
             onToggle={() => setShowCardMenu((prev) => !prev)}
             onClose={() => setShowCardMenu(false)}
             actions={actionItems}
+            align={isMobile ? 'left' : 'right'}
           />
         </div>
       </div>
@@ -157,6 +165,7 @@ export default function CardDetailPage() {
           linkedCards={linkedCards}
           onToggleTaskAtIndex={markdownTools.toggleTaskAtIndex}
           onOpenCard={(id) => router.push(`/cards/${id}`)}
+          scrollPaddingClassName="px-0 py-1"
         />
       )}
 

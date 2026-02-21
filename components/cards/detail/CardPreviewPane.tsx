@@ -24,7 +24,11 @@ export default function CardPreviewPane({
       <article
         className={`prose max-w-none min-h-0 overflow-y-auto text-sm leading-relaxed text-slate-700 ${scrollPaddingClassName ?? ''}`}
       >
-        <CardMarkdownPreview text={content || 'No content yet.'} onToggleTaskAtIndex={onToggleTaskAtIndex} />
+        <CardMarkdownPreview
+          text={content || 'No content yet.'}
+          onToggleTaskAtIndex={onToggleTaskAtIndex}
+          onOpenCard={onOpenCard}
+        />
       </article>
       <LinkedCardsList cards={linkedCards} onOpenCard={onOpenCard} />
     </div>

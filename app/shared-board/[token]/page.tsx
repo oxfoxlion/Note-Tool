@@ -72,6 +72,18 @@ export default function SharedBoardPage() {
   }, [viewport]);
 
   useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const handleChange = () => {
+      if (media.matches) {
+        setCardOpenMode('sidepanel');
+      }
+    };
+    handleChange();
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
     try {
       const raw = window.localStorage.getItem(modeStorageKey);
       if (raw === 'modal' || raw === 'sidepanel') {

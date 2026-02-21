@@ -20,6 +20,7 @@ export function useCardDetailState({
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const loadedCardIdRef = useRef<string | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const lastSavedRef = useRef<{ title: string; content: string }>({ title: '', content: '' });
 
@@ -31,8 +32,12 @@ export function useCardDetailState({
         const found = cards.find((item) => String(item.id) === String(cardId)) || null;
         setCard(found);
         if (found) {
-          setTitle(found.title);
-          setContent(found.content ?? '');
+          const nextLoadedId = String(found.id);
+          if (loadedCardIdRef.current !== nextLoadedId) {
+            setTitle(found.title);
+            setContent(found.content ?? '');
+            loadedCardIdRef.current = nextLoadedId;
+          }
           lastSavedRef.current = { title: found.title, content: found.content ?? '' };
         }
       } catch (err: unknown) {

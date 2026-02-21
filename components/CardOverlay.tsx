@@ -66,6 +66,7 @@ export default function CardOverlay({
   const [showCardMenu, setShowCardMenu] = useState(false);
   const [mounted, setMounted] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const prevCardIdRef = useRef(card.id);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [showMentions, setShowMentions] = useState(false);
@@ -74,6 +75,8 @@ export default function CardOverlay({
   const removeMembership = useCardBoardMembership(card.id);
 
   useEffect(() => {
+    if (prevCardIdRef.current === card.id) return;
+    prevCardIdRef.current = card.id;
     setTitle(card.title);
     setContent(card.content ?? '');
     setViewMode('view');
@@ -570,10 +573,14 @@ export default function CardOverlay({
           onNavigateCard(cardId);
           return;
         }
+        router.push(`/cards/${cardId}`);
+        return;
       }
     }
-    anchor.setAttribute('target', '_blank');
-    anchor.setAttribute('rel', 'noopener noreferrer');
+    if (href) {
+      event.preventDefault();
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const handleOpenShareMenu = useCallback(() => {
@@ -799,7 +806,6 @@ export default function CardOverlay({
                           onNavigateCard(item.id);
                           return;
                         }
-                        onClose();
                         router.push(`/cards/${item.id}`);
                       }}
                       className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"

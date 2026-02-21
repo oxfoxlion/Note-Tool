@@ -77,6 +77,19 @@ function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && error.message === 'UNAUTHORIZED';
 }
 
+function parseInternalCardId(href: string | null): number | null {
+  if (!href) return null;
+  const match = href.match(/^\/cards\/(\d+)(?:[/?#].*)?$/);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isFinite(id) ? id : null;
+}
+
+function findCardById(cards: Card[], targetCardId: number): Card | null {
+  const normalizedTargetId = Number(targetCardId);
+  return cards.find((item) => Number(item.id) === normalizedTargetId) ?? null;
+}
+
 export default function BoardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -211,7 +224,12 @@ export default function BoardDetailPage() {
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 768px)');
-    const handleChange = () => setIsMobile(media.matches);
+    const handleChange = () => {
+      setIsMobile(media.matches);
+      if (media.matches) {
+        setCardOpenMode('sidepanel');
+      }
+    };
     handleChange();
     media.addEventListener('change', handleChange);
     return () => media.removeEventListener('change', handleChange);
@@ -385,6 +403,67 @@ export default function BoardDetailPage() {
     });
     setSelectedCard(null);
   };
+
+  const openLinkedCardInContext = useCallback(
+    async (targetCardId: number) => {
+      const existing =
+        findCardById(allCards, targetCardId) ??
+        findCardById(cards, targetCardId) ??
+        null;
+      if (existing) {
+        setSelectedCard(existing);
+        return;
+      }
+
+      try {
+        const latestCards = await getCards();
+        setAllCards(latestCards);
+        const found =
+          findCardById(latestCards, targetCardId) ??
+          findCardById(cards, targetCardId) ??
+          null;
+        if (found) {
+          setSelectedCard(found);
+          return;
+        }
+      } catch (err: unknown) {
+        if (isUnauthorizedError(err)) {
+          router.push('/auth/login');
+          return;
+        }
+      }
+
+      setError('Linked card not found.');
+    },
+    [allCards, cards, router]
+  );
+
+  const handleBoardCardContentClick = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest?.('a');
+      if (!anchor) return;
+      const internalCardId = parseInternalCardId(anchor.getAttribute('href'));
+      event.preventDefault();
+      event.stopPropagation();
+      if (internalCardId) {
+        void openLinkedCardInContext(internalCardId);
+        return;
+      }
+      const href = anchor.getAttribute('href');
+      if (href) {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    },
+    [openLinkedCardInContext]
+  );
+
+  const handleNavigateOverlayCard = useCallback(
+    (targetCardId: number) => {
+      void openLinkedCardInContext(targetCardId);
+    },
+    [openLinkedCardInContext]
+  );
 
   const finalizeRegionFromBounds = useCallback((startX: number, startY: number, endX: number, endY: number) => {
     const left = Math.min(startX, endX);
@@ -675,6 +754,10 @@ export default function BoardDetailPage() {
 
   const beginDrag = (event: React.PointerEvent<HTMLDivElement>, cardId: number) => {
     if (tool !== 'add') return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest?.('a')) return;
+    if (target?.closest?.('button')) return;
+    if (target?.closest?.('input, textarea, select')) return;
     event.stopPropagation();
     if (resizeRef.current) return;
     const rect = stageRef.current?.getBoundingClientRect();
@@ -1690,7 +1773,7 @@ export default function BoardDetailPage() {
                     cardRefs.current[card.id] = el;
                   }}
                 >
-                  <div className="relative">
+                  <div className="relative" onClickCapture={handleBoardCardContentClick}>
                     <CardPreview
                       card={card}
                       renderMarkdown
@@ -1703,10 +1786,6 @@ export default function BoardDetailPage() {
                       onPointerDown={(event) => event.stopPropagation()}
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (isMobile) {
-                          router.push(`/cards/${card.id}?boardId=${boardId}`);
-                          return;
-                        }
                         setSelectedCard(card);
                       }}
                       className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm hover:bg-slate-100"
@@ -1748,6 +1827,7 @@ export default function BoardDetailPage() {
           onDelete={handleDeleteSelectedCard}
           onRemoveFromBoard={handleRemoveFromBoard}
           allCards={allCards}
+          onNavigateCard={handleNavigateOverlayCard}
           breadcrumbRootLabel={boardName || 'Board'}
         />
       )}
