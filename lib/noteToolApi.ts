@@ -150,6 +150,7 @@ export type BoardRegion = {
   id: number;
   board_id: number;
   name: string;
+  color: string;
   x_pos: number;
   y_pos: number;
   width: number;
@@ -335,7 +336,7 @@ export async function getBoardRegions(boardId: number): Promise<BoardRegion[]> {
 
 export async function createBoardRegion(
   boardId: number,
-  payload: { name: string; x_pos: number; y_pos: number; width: number; height: number }
+  payload: { name: string; color?: string; x_pos: number; y_pos: number; width: number; height: number }
 ) {
   const { data } = await api.post(`/note_tool/board/${boardId}/regions`, payload, {
     headers: authHeaders(),
@@ -346,7 +347,7 @@ export async function createBoardRegion(
 export async function updateBoardRegion(
   boardId: number,
   regionId: number,
-  payload: { name?: string; x_pos?: number; y_pos?: number; width?: number; height?: number }
+  payload: { name?: string; color?: string; x_pos?: number; y_pos?: number; width?: number; height?: number }
 ) {
   const { data } = await api.put(`/note_tool/board/${boardId}/regions/${regionId}`, payload, {
     headers: authHeaders(),

@@ -10,11 +10,28 @@ import { Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
 type RegionView = {
   id: number;
   name: string;
+  color: string;
   x: number;
   y: number;
   width: number;
   height: number;
 };
+
+const DEFAULT_REGION_COLOR = '#38bdf8';
+
+function normalizeRegionColor(color: string | null | undefined): string {
+  if (typeof color !== 'string') return DEFAULT_REGION_COLOR;
+  const trimmed = color.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : DEFAULT_REGION_COLOR;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = normalizeRegionColor(hex);
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function SharedBoardPage() {
   const params = useParams<{ token: string }>();
@@ -243,6 +260,7 @@ export default function SharedBoardPage() {
           data.regions.map((region) => ({
             id: region.id,
             name: region.name,
+            color: normalizeRegionColor(region.color),
             x: region.x_pos,
             y: region.y_pos,
             width: region.width,
@@ -400,20 +418,28 @@ export default function SharedBoardPage() {
             }}
           >
             {regions.map((region) => (
-            <div
-              key={region.id}
-              className="pointer-events-none absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10"
-              style={{
-                transform: `translate(${region.x}px, ${region.y}px)`,
-                width: region.width,
-                height: region.height,
-              }}
-            >
-              <div className="absolute left-0 top-0 -translate-y-full rounded-md border border-sky-300 bg-white/95 px-2 py-1 text-[11px] font-semibold text-sky-700 shadow-sm">
-                {region.name}
+              <div
+                key={region.id}
+                className="pointer-events-none absolute border-2 border-dashed"
+                style={{
+                  transform: `translate(${region.x}px, ${region.y}px)`,
+                  width: region.width,
+                  height: region.height,
+                  borderColor: hexToRgba(region.color, 0.78),
+                  backgroundColor: hexToRgba(region.color, 0.12),
+                }}
+              >
+                <div
+                  className="absolute left-0 top-0 -translate-y-full rounded-md border bg-white/95 px-2 py-1 text-xs font-semibold leading-4 shadow-sm"
+                  style={{
+                    borderColor: hexToRgba(region.color, 0.35),
+                    color: hexToRgba(region.color, 0.95),
+                  }}
+                >
+                  {region.name}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
             {cards.map((card) => {
               const x = typeof card.x_pos === 'number' ? card.x_pos : 0;
               const y = typeof card.y_pos === 'number' ? card.y_pos : 0;

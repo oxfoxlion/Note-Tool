@@ -33,11 +33,45 @@ import {
 type BoardRegionView = {
   id: number;
   name: string;
+  color: string;
   x: number;
   y: number;
   width: number;
   height: number;
 };
+
+type DraftRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+const DEFAULT_REGION_COLOR = '#38bdf8';
+const REGION_COLOR_PRESETS = [
+  '#38bdf8',
+  '#22c55e',
+  '#f59e0b',
+  '#ef4444',
+  '#a855f7',
+  '#14b8a6',
+  '#f97316',
+  '#64748b',
+];
+
+function normalizeRegionColor(color: string | null | undefined): string {
+  if (typeof color !== 'string') return DEFAULT_REGION_COLOR;
+  const trimmed = color.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed : DEFAULT_REGION_COLOR;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = normalizeRegionColor(hex);
+  const r = parseInt(normalized.slice(1, 3), 16);
+  const g = parseInt(normalized.slice(3, 5), 16);
+  const b = parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && error.message === 'UNAUTHORIZED';
@@ -86,11 +120,12 @@ export default function BoardDetailPage() {
   const [sharePassword, setSharePassword] = useState('');
   const [showSharePassword, setShowSharePassword] = useState(false);
   const [regions, setRegions] = useState<BoardRegionView[]>([]);
-  const [draftRegion, setDraftRegion] = useState<Omit<BoardRegionView, 'id' | 'name'> | null>(null);
+  const [draftRegion, setDraftRegion] = useState<DraftRegion | null>(null);
   const [showRegionName, setShowRegionName] = useState(false);
   const [regionNameValue, setRegionNameValue] = useState('');
+  const [regionColorValue, setRegionColorValue] = useState(DEFAULT_REGION_COLOR);
   const [regionNameError, setRegionNameError] = useState('');
-  const [pendingRegion, setPendingRegion] = useState<Omit<BoardRegionView, 'id' | 'name'> | null>(null);
+  const [pendingRegion, setPendingRegion] = useState<DraftRegion | null>(null);
   const [editingRegionId, setEditingRegionId] = useState<number | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const defaultCardWidth = 420;
@@ -167,6 +202,7 @@ export default function BoardDetailPage() {
   const mapApiRegionToView = (region: ApiBoardRegion): BoardRegionView => ({
     id: region.id,
     name: region.name,
+    color: normalizeRegionColor(region.color),
     x: region.x_pos,
     y: region.y_pos,
     width: region.width,
@@ -370,6 +406,7 @@ export default function BoardDetailPage() {
     setEditingRegionId(null);
     setRegionNameError('');
     setRegionNameValue(`Region ${regions.length + 1}`);
+    setRegionColorValue(DEFAULT_REGION_COLOR);
     setShowRegionName(true);
   }, [regions.length]);
 
@@ -741,6 +778,7 @@ export default function BoardDetailPage() {
   const closeRegionNameModal = () => {
     setShowRegionName(false);
     setRegionNameValue('');
+    setRegionColorValue(DEFAULT_REGION_COLOR);
     setRegionNameError('');
     setPendingRegion(null);
     setEditingRegionId(null);
@@ -755,7 +793,7 @@ export default function BoardDetailPage() {
 
     try {
       if (editingRegionId) {
-        const updated = await updateBoardRegion(boardId, editingRegionId, { name });
+        const updated = await updateBoardRegion(boardId, editingRegionId, { name, color: regionColorValue });
         const updatedRegion = mapApiRegionToView(updated);
         setRegions((prev) =>
           prev.map((region) => (region.id === editingRegionId ? updatedRegion : region))
@@ -767,6 +805,7 @@ export default function BoardDetailPage() {
       if (!pendingRegion) return;
       const created = await createBoardRegion(boardId, {
         name,
+        color: regionColorValue,
         x_pos: pendingRegion.x,
         y_pos: pendingRegion.y,
         width: pendingRegion.width,
@@ -1526,16 +1565,24 @@ export default function BoardDetailPage() {
                 onPointerMove={moveRegionDrag}
                 onPointerUp={endRegionDrag}
                 onPointerCancel={endRegionDrag}
-                className={`absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10 ${
+                className={`absolute border-2 border-dashed ${
                   tool === 'region' ? 'pointer-events-auto cursor-move' : 'pointer-events-none'
                 }`}
                 style={{
                   transform: `translate(${region.x}px, ${region.y}px)`,
                   width: region.width,
                   height: region.height,
+                  borderColor: hexToRgba(region.color, 0.78),
+                  backgroundColor: hexToRgba(region.color, 0.12),
                 }}
               >
-                <div className="pointer-events-auto absolute left-0 top-0 -translate-y-full rounded-md border border-sky-300 bg-white/95 px-2 py-1 text-[11px] font-semibold text-sky-700 shadow-sm">
+                <div
+                  className="pointer-events-auto absolute left-0 top-0 -translate-y-full rounded-md border bg-white/95 px-2 py-1 text-xs font-semibold leading-4 shadow-sm"
+                  style={{
+                    borderColor: hexToRgba(region.color, 0.35),
+                    color: hexToRgba(region.color, 0.95),
+                  }}
+                >
                   <div className="flex items-center gap-2">
                     <span className="max-w-40 truncate">{region.name}</span>
                     <button
@@ -1547,9 +1594,11 @@ export default function BoardDetailPage() {
                         setEditingRegionId(region.id);
                         setRegionNameError('');
                         setRegionNameValue(region.name);
+                        setRegionColorValue(normalizeRegionColor(region.color));
                         setShowRegionName(true);
                       }}
-                      className="text-sky-600 hover:text-sky-800"
+                      className="text-xs leading-none hover:opacity-80"
+                      style={{ color: hexToRgba(region.color, 0.9) }}
                       aria-label="Rename region"
                       title="Rename region"
                     >
@@ -1571,7 +1620,7 @@ export default function BoardDetailPage() {
                           setError('Failed to delete region.');
                         }
                       }}
-                      className="text-rose-500 hover:text-rose-700"
+                      className="text-xs leading-none text-rose-500 hover:text-rose-700"
                       aria-label="Delete region"
                       title="Delete region"
                     >
@@ -1586,7 +1635,11 @@ export default function BoardDetailPage() {
                     onPointerMove={moveRegionResize}
                     onPointerUp={endRegionResize}
                     onPointerCancel={endRegionResize}
-                    className="pointer-events-auto absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-nwse-resize rounded-sm border border-sky-600 bg-sky-500 shadow-sm"
+                    className="pointer-events-auto absolute -bottom-1.5 -right-1.5 h-4 w-4 cursor-nwse-resize rounded-sm border shadow-sm"
+                    style={{
+                      borderColor: hexToRgba(region.color, 0.95),
+                      backgroundColor: hexToRgba(region.color, 0.78),
+                    }}
                     title="Resize region"
                     aria-label="Resize region"
                   />
@@ -1595,11 +1648,13 @@ export default function BoardDetailPage() {
             ))}
             {draftRegion && (
               <div
-                className="absolute border-2 border-dashed border-sky-500/70 bg-sky-300/10 pointer-events-none"
+                className="absolute pointer-events-none border-2 border-dashed"
                 style={{
                   transform: `translate(${draftRegion.x}px, ${draftRegion.y}px)`,
                   width: draftRegion.width,
                   height: draftRegion.height,
+                  borderColor: hexToRgba(DEFAULT_REGION_COLOR, 0.78),
+                  backgroundColor: hexToRgba(DEFAULT_REGION_COLOR, 0.12),
                 }}
               />
             )}
@@ -2095,6 +2150,37 @@ export default function BoardDetailPage() {
               placeholder="Region name"
               className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-slate-500">Color</label>
+              <p className="mb-2 text-[11px] text-slate-500">
+                Choose a preset color, or use the picker below for a custom color.
+              </p>
+              <div className="mb-2 flex flex-wrap gap-2">
+                {REGION_COLOR_PRESETS.map((preset) => {
+                  const selected = preset.toLowerCase() === regionColorValue.toLowerCase();
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setRegionColorValue(preset)}
+                      className={`h-6 w-6 rounded-full border ${selected ? 'ring-2 ring-slate-400 ring-offset-1' : ''}`}
+                      style={{ backgroundColor: preset, borderColor: selected ? '#334155' : '#cbd5e1' }}
+                      title={preset}
+                      aria-label={`Use color ${preset}`}
+                    />
+                  );
+                })}
+              </div>
+              <input
+                type="color"
+                value={regionColorValue}
+                onChange={(event) => {
+                  setRegionColorValue(normalizeRegionColor(event.target.value));
+                }}
+                className="h-10 w-20 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
+                aria-label="Region color"
+              />
+            </div>
             {regionNameError && <div className="mt-2 text-xs text-rose-600">{regionNameError}</div>}
             <div className="mt-4 flex items-center justify-between">
               <button
