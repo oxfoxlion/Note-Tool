@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { Suspense } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
 import {
@@ -65,7 +66,7 @@ function saveCustomOrder(ids: number[]) {
   }
 }
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+function AppLayoutContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -674,5 +675,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AppLayout({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <AppLayoutContent>{children}</AppLayoutContent>
+    </Suspense>
   );
 }
