@@ -2,12 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Board, createBoard, deleteBoard, getBoards, updateBoard } from '../../../lib/noteToolApi';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  Board,
+  BoardFolder,
+  createBoard,
+  deleteBoard,
+  getBoardFolders,
+  getBoards,
+  updateBoard,
+} from '../../../lib/noteToolApi';
 
 export default function BoardsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [boards, setBoards] = useState<Board[]>([]);
+  const [folders, setFolders] = useState<BoardFolder[]>([]);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -15,18 +25,57 @@ export default function BoardsPage() {
   const [editingName, setEditingName] = useState('');
   const [editingTags, setEditingTags] = useState('');
   const [editingDescription, setEditingDescription] = useState('');
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null);
   const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
   const [query, setQuery] = useState('');
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [showTagMenu, setShowTagMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [page, setPage] = useState(1);
+  const [openBoardMenuId, setOpenBoardMenuId] = useState<number | null>(null);
+  const [viewportTier, setViewportTier] = useState<'sm' | 'md' | 'xl'>('xl');
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectedFolderId = (() => {
+    const raw = searchParams.get('folderId');
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  })();
+  const archiveFolder = folders.find((folder) => folder.system_key === 'archive');
+  const selectedFolder = selectedFolderId ? folders.find((folder) => folder.id === selectedFolderId) : null;
+
+  useEffect(() => {
+    const mediaMd = window.matchMedia('(min-width: 768px)');
+    const mediaXl = window.matchMedia('(min-width: 1280px)');
+    const apply = () => {
+      if (mediaXl.matches) {
+        setViewportTier('xl');
+        return;
+      }
+      if (mediaMd.matches) {
+        setViewportTier('md');
+        return;
+      }
+      setViewportTier('sm');
+    };
+    apply();
+    mediaMd.addEventListener('change', apply);
+    mediaXl.addEventListener('change', apply);
+    return () => {
+      mediaMd.removeEventListener('change', apply);
+      mediaXl.removeEventListener('change', apply);
+    };
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await getBoards();
-        setBoards(data);
+        const [boardsData, foldersData] = await Promise.all([
+          getBoards(selectedFolderId),
+          getBoardFolders(),
+        ]);
+        setBoards(boardsData);
+        setFolders(foldersData);
       } catch (err: any) {
         if (err?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
@@ -35,8 +84,8 @@ export default function BoardsPage() {
         setError('Failed to load boards.');
       }
     };
-    load();
-  }, [router]);
+    void load();
+  }, [router, selectedFolderId]);
 
   useEffect(() => {
     if (!showTagMenu) return;
@@ -50,15 +99,33 @@ export default function BoardsPage() {
     return () => window.removeEventListener('mousedown', handleClick);
   }, [showTagMenu]);
 
+  useEffect(() => {
+    if (openBoardMenuId === null) return;
+    const handleClick = () => setOpenBoardMenuId(null);
+    window.addEventListener('mousedown', handleClick);
+    return () => window.removeEventListener('mousedown', handleClick);
+  }, [openBoardMenuId]);
+
   const handleCreate = async () => {
     if (!name.trim()) {
       setError('Board name is required.');
       return;
     }
-    setError('');
-    const board = await createBoard({ name: name.trim() });
-    setBoards((prev) => [board, ...prev]);
-    setName('');
+    try {
+      setError('');
+      const board = await createBoard({
+        name: name.trim(),
+        folder_id: selectedFolderId ?? undefined,
+      });
+      setBoards((prev) => [board, ...prev]);
+      setName('');
+    } catch (err: any) {
+      if (err?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to create board.');
+    }
   };
 
   const handleStartEdit = (board: Board) => {
@@ -66,6 +133,7 @@ export default function BoardsPage() {
     setEditingName(board.name);
     setEditingTags((board.tags ?? []).join(', '));
     setEditingDescription(board.description ?? '');
+    setEditingFolderId(board.folder_id ?? null);
     setError('');
   };
 
@@ -85,6 +153,7 @@ export default function BoardsPage() {
         name: editingName.trim(),
         tags,
         description: editingDescription.trim(),
+        folder_id: editingFolderId,
       });
       setBoards((prev) =>
         prev.map((item) =>
@@ -94,6 +163,7 @@ export default function BoardsPage() {
                 name: updated.name,
                 description: updated.description ?? editingDescription.trim(),
                 tags: updated.tags ?? tags,
+                folder_id: updated.folder_id ?? editingFolderId,
               }
             : item
         )
@@ -124,6 +194,34 @@ export default function BoardsPage() {
     }
   };
 
+  const handleArchiveToggle = async (board: Board) => {
+    if (!archiveFolder) {
+      setError('Archive folder is not ready yet.');
+      return;
+    }
+    const isArchived = board.folder_id === archiveFolder.id;
+    const nextFolderId = isArchived ? null : archiveFolder.id;
+    try {
+      await updateBoard(board.id, {
+        name: board.name,
+        tags: board.tags ?? [],
+        description: board.description ?? '',
+        folder_id: nextFolderId,
+      });
+      if (selectedFolderId) {
+        setBoards((prev) => prev.filter((item) => item.id !== board.id));
+      } else if (!isArchived) {
+        setBoards((prev) => prev.filter((item) => item.id !== board.id));
+      }
+    } catch (err: any) {
+      if (err?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setError(isArchived ? 'Failed to unarchive board.' : 'Failed to archive board.');
+    }
+  };
+
   const availableTags = useMemo(
     () =>
       Array.from(
@@ -147,20 +245,31 @@ export default function BoardsPage() {
     });
   }, [boards, query, tagFilters]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [query, selectedFolderId, tagFilters, boards.length, viewportTier]);
+
+  const pageSize = viewportTier === 'xl' ? 9 : viewportTier === 'md' ? 6 : 3;
+
+  const totalPages = Math.max(1, Math.ceil(filteredBoards.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedBoards = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredBoards.slice(start, start + pageSize);
+  }, [filteredBoards, currentPage, pageSize]);
+
   const tagLabel =
     tagFilters.length === 0 ? 'All tags' : tagFilters.length === 1 ? tagFilters[0] : `${tagFilters.length} tags`;
-
-  const toDescriptionPreview = (description?: string | null) => {
-    const text = (description ?? '').trim();
-    if (!text) return '';
-    if (text.length <= 100) return text;
-    return `${text.slice(0, 100)}...`;
-  };
 
   return (
     <div className="space-y-8">
       <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Boards</div>
+        <div>
+          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Boards</div>
+          {selectedFolder && (
+            <div className="mt-1 text-xs text-slate-500">Folder: {selectedFolder.name}</div>
+          )}
+        </div>
         <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
           {showSearch && (
             <input
@@ -244,80 +353,143 @@ export default function BoardsPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredBoards.map((board) => {
-          const descriptionPreview = toDescriptionPreview(board.description);
-          return (
-          <div
-            key={board.id}
-            className="relative flex min-h-[170px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <Link href={`/boards/${board.id}`} className="block flex-1">
-              <div className="text-sm font-semibold text-slate-900">{board.name}</div>
-              {descriptionPreview && (
-                <div className="mt-2 text-xs leading-relaxed text-slate-600">{descriptionPreview}</div>
-              )}
-            </Link>
-            <div className="mt-4 flex items-end justify-between gap-3">
-              <Link href={`/boards/${board.id}`} className="min-w-0 flex-1">
-                <div className="text-xs text-slate-500">Cards: {board.card_count ?? 0}</div>
-                {(board.tags?.length ?? 0) > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {board.tags?.map((tag) => (
-                      <span
-                        key={`${board.id}-${tag}`}
-                        className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500"
-                      >
-                        {tag}
-                      </span>
-                    ))}
+      <div className="h-[calc(100vh-13.5rem)]">
+        <section className="h-full overflow-visible pr-1">
+          <div className="grid h-full grid-rows-3 content-start gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {pagedBoards.map((board) => {
+            const description = (board.description ?? '').trim();
+            return (
+            <div
+              key={board.id}
+              className={`relative flex h-full min-h-0 flex-col overflow-visible rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                openBoardMenuId === board.id ? 'z-40' : 'z-0'
+              }`}
+            >
+              <Link href={`/boards/${board.id}`} className="block flex-1">
+                <div className="truncate text-sm font-semibold text-slate-900">{board.name}</div>
+                {description && (
+                  <div
+                    className="mt-1 overflow-hidden text-xs leading-relaxed text-slate-600"
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                    }}
+                  >
+                    {description}
                   </div>
                 )}
               </Link>
-              <div className="flex shrink-0 justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleStartEdit(board);
-                  }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"
-                  aria-label="Edit board name"
-                  title="Edit"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <path
-                      d="M4 16.5V20h3.5L18 9.5 14.5 6 4 16.5z"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      fill="none"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="1.5" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setDeletingBoard(board);
-                  }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50"
-                  aria-label="Delete board"
-                  title="Delete"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  </svg>
-                </button>
+              <div className="mt-1.5 flex items-end justify-between gap-2">
+                <Link href={`/boards/${board.id}`} className="min-w-0 flex-1">
+                  <div className="text-xs text-slate-500">Cards: {board.card_count ?? 0}</div>
+                  {(board.tags?.length ?? 0) > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {board.tags?.slice(0, 2).map((tag) => (
+                        <span
+                          key={`${board.id}-${tag}`}
+                          className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {(board.tags?.length ?? 0) > 2 && (
+                        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                          +{(board.tags?.length ?? 0) - 2}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </Link>
+                <div className="relative flex shrink-0 justify-end">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setOpenBoardMenuId((prev) => (prev === board.id ? null : board.id));
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"
+                    aria-label="Board actions"
+                    title="Board actions"
+                  >
+                    ...
+                  </button>
+                  {openBoardMenuId === board.id && (
+                    <div
+                      className="absolute right-0 top-full z-50 mt-1 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+                      onMouseDown={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleArchiveToggle(board);
+                          setOpenBoardMenuId(null);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        {board.folder_id === archiveFolder?.id ? 'Unarchive' : 'Archive'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleStartEdit(board);
+                          setOpenBoardMenuId(null);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDeletingBoard(board);
+                          setOpenBoardMenuId(null);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs text-rose-600 hover:bg-rose-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+            );
+          })}
           </div>
-          );
-        })}
-      </section>
+        </section>
+      </div>
+
+      <div className="fixed bottom-1 md:bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-sm backdrop-blur">
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1}
+            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <div className="text-xs text-slate-500">
+            {currentPage} / {totalPages}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage >= totalPages}
+            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
       <div className="fixed bottom-6 right-6 z-40">
         {showCreate && (
@@ -388,6 +560,21 @@ export default function BoardsPage() {
               rows={4}
               className="mt-3 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
+            <select
+              value={editingFolderId === null ? '' : String(editingFolderId)}
+              onChange={(event) => {
+                const raw = event.target.value;
+                setEditingFolderId(raw ? Number(raw) : null);
+              }}
+              className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            >
+              <option value="">No folder</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={String(folder.id)}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
             {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
             <div className="mt-4 flex items-center justify-between">
               <button

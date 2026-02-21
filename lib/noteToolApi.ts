@@ -134,11 +134,22 @@ export type Card = {
 export type Board = {
   id: number;
   user_id: string;
+  folder_id?: number | null;
   name: string;
   description?: string | null;
   tags?: string[];
   created_at: string;
   card_count?: number;
+};
+
+export type BoardFolder = {
+  id: number;
+  user_id: string;
+  name: string;
+  is_system: boolean;
+  system_key: string | null;
+  sort_order: number;
+  created_at: string;
 };
 
 export type BoardSummary = {
@@ -278,19 +289,48 @@ export async function getSharedCardMeta(token: string): Promise<SharedMetaPayloa
   return data;
 }
 
-export async function getBoards(): Promise<Board[]> {
-  const { data } = await api.get('/note_tool/board/', { headers: authHeaders() });
+export async function getBoards(folderId?: number | null): Promise<Board[]> {
+  const params = folderId ? { folder_id: folderId } : undefined;
+  const { data } = await api.get('/note_tool/board/', { headers: authHeaders(), params });
   return data;
 }
 
-export async function createBoard(payload: { name: string; description?: string }) {
+export async function createBoard(payload: { name: string; description?: string; folder_id?: number | null }) {
   const { data } = await api.post('/note_tool/board/', payload, { headers: authHeaders() });
   return data as Board;
 }
 
-export async function updateBoard(boardId: number, payload: { name: string; tags?: string[]; description?: string }) {
+export async function updateBoard(
+  boardId: number,
+  payload: { name: string; tags?: string[]; description?: string; folder_id?: number | null }
+) {
   const { data } = await api.put(`/note_tool/board/${boardId}`, payload, { headers: authHeaders() });
   return data as Board;
+}
+
+export async function getBoardFolders(): Promise<BoardFolder[]> {
+  const { data } = await api.get('/note_tool/board/folders', { headers: authHeaders() });
+  return data;
+}
+
+export async function createBoardFolder(payload: { name: string }) {
+  const { data } = await api.post('/note_tool/board/folders', payload, { headers: authHeaders() });
+  return data as BoardFolder;
+}
+
+export async function updateBoardFolder(folderId: number, payload: { name: string }) {
+  const { data } = await api.put(`/note_tool/board/folders/${folderId}`, payload, { headers: authHeaders() });
+  return data as BoardFolder;
+}
+
+export async function reorderBoardFolders(folderIds: number[]) {
+  const { data } = await api.put('/note_tool/board/folders/reorder', { folder_ids: folderIds }, { headers: authHeaders() });
+  return data as BoardFolder[];
+}
+
+export async function deleteBoardFolder(folderId: number) {
+  const { data } = await api.delete(`/note_tool/board/folders/${folderId}`, { headers: authHeaders() });
+  return data as BoardFolder;
 }
 
 export async function deleteBoard(boardId: number) {

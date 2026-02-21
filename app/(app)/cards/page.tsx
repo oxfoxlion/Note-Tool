@@ -22,6 +22,7 @@ import {
 export default function CardsPage() {
   const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
+  const [isXl, setIsXl] = useState(true);
   const [cards, setCards] = useState<Card[]>([]);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
@@ -34,14 +35,23 @@ export default function CardsPage() {
   const [error, setError] = useState('');
   const [cardPreviewLength, setCardPreviewLength] = useState(120);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [page, setPage] = useState(1);
   const filterRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const media = window.matchMedia('(max-width: 768px)');
-    const handleChange = () => setIsMobile(media.matches);
+    const mediaMobile = window.matchMedia('(max-width: 768px)');
+    const mediaXl = window.matchMedia('(min-width: 1280px)');
+    const handleChange = () => {
+      setIsMobile(mediaMobile.matches);
+      setIsXl(mediaXl.matches);
+    };
     handleChange();
-    media.addEventListener('change', handleChange);
-    return () => media.removeEventListener('change', handleChange);
+    mediaMobile.addEventListener('change', handleChange);
+    mediaXl.addEventListener('change', handleChange);
+    return () => {
+      mediaMobile.removeEventListener('change', handleChange);
+      mediaXl.removeEventListener('change', handleChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -108,6 +118,19 @@ export default function CardsPage() {
       return haystack.includes(keyword);
     });
   }, [cards, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, boardFilter, cards.length, isMobile, isXl]);
+
+  const pageSize = isMobile ? 12 : isXl ? 9 : 6;
+
+  const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCards = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredCards.slice(start, start + pageSize);
+  }, [filteredCards, currentPage, pageSize]);
 
   const handleCreate = async (payload: { title: string; content: string }) => {
     setError('');
@@ -301,23 +324,56 @@ export default function CardsPage() {
 
       {error && <div className="text-xs text-rose-600">{error}</div>}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredCards.map((card) => (
-          <div key={card.id}>
-            <CardPreview
-              card={card}
-              previewLength={cardPreviewLength}
-              onSelect={() => {
-                if (isMobile) {
-                  router.push(`/cards/${card.id}`);
-                  return;
-                }
-                setSelectedCard(card);
-              }}
-            />
+      <div className="flex h-[calc(100vh-15rem)] flex-col">
+        <section className={`${isMobile ? 'flex-1 overflow-y-auto' : 'h-full overflow-hidden'} pr-1`}>
+          <div
+            className={`grid gap-4 ${
+              isMobile ? 'md:grid-cols-2 xl:grid-cols-3' : 'h-full grid-rows-3 md:grid-cols-2 xl:grid-cols-3'
+            }`}
+          >
+          {pagedCards.map((card) => (
+            <div key={card.id} className={isMobile ? '' : 'h-full min-h-0 overflow-hidden'}>
+              <CardPreview
+                card={card}
+                previewLength={cardPreviewLength}
+                fillHeight={!isMobile}
+                onSelect={() => {
+                  if (isMobile) {
+                    router.push(`/cards/${card.id}`);
+                    return;
+                  }
+                  setSelectedCard(card);
+                }}
+              />
+            </div>
+          ))}
           </div>
-        ))}
-      </section>
+        </section>
+      </div>
+
+      <div className="fixed bottom-1 md:bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-sm backdrop-blur">
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1}
+            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <div className="text-xs text-slate-500">
+            {currentPage} / {totalPages}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage >= totalPages}
+            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
       {selectedCard && (
         <CardOverlay
@@ -351,7 +407,7 @@ export default function CardsPage() {
           }
           setShowCreate(true);
         }}
-        className="fixed bottom-8 right-8 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-2xl font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+        className="fixed bottom-6 right-6 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-2xl font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
         aria-label="Create card"
       >
         +
