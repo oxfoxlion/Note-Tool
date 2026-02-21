@@ -40,6 +40,9 @@ export default function LoginPage() {
         setMessage(response.data.message || '請輸入兩步驟驗證碼。');
         setMessageType('success');
         localStorage.setItem('userId', response.data.userId);
+        if (typeof response.data.displayName === 'string') {
+          localStorage.setItem('note_tool_display_name', response.data.displayName);
+        }
         setTimeout(() => {
           router.push('/auth/verify');
         }, 1500);
@@ -52,6 +55,9 @@ export default function LoginPage() {
         localStorage.setItem('note_tool_token', response.data.token);
         if (response.data.userId) {
           localStorage.setItem('userId', response.data.userId);
+        }
+        if (typeof response.data.displayName === 'string') {
+          localStorage.setItem('note_tool_display_name', response.data.displayName);
         }
         localStorage.removeItem('userId');
         setTimeout(() => {

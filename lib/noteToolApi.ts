@@ -203,6 +203,13 @@ export type UserSettings = {
   theme?: 'light';
 };
 
+export type UserProfile = {
+  id: string;
+  email: string;
+  displayName: string;
+  twoFactorEnabled: boolean;
+};
+
 export async function getCards(): Promise<Card[]> {
   const { data } = await api.get('/note_tool/card/', { headers: authHeaders() });
   return data;
@@ -364,4 +371,14 @@ export async function getUserSettings(): Promise<UserSettings> {
 export async function updateUserSettings(payload: Partial<UserSettings>) {
   const { data } = await api.put('/note_tool/user/settings', payload, { headers: authHeaders() });
   return data as UserSettings;
+}
+
+export async function getUserProfile(): Promise<UserProfile> {
+  const { data } = await api.get('/note_tool/user/profile', { headers: authHeaders() });
+  return data;
+}
+
+export async function disableTwoFactorAuth() {
+  const { data } = await api.post('/note_tool/auth/2fa/disable', {}, { headers: authHeaders() });
+  return data as { message: string; twoFactorEnabled: boolean };
 }

@@ -5,16 +5,27 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
+import { getUserProfile } from '../../lib/noteToolApi';
 
 const navItems = [
   { href: '/cards', label: 'Card Box' },
   { href: '/boards', label: 'Boards' },
+  { href: '/settings', label: 'Setting' },
 ];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [displayName, setDisplayName] = useState(() => {
+    if (typeof window === 'undefined') return 'User';
+    try {
+      const cachedName = localStorage.getItem('note_tool_display_name') || '';
+      return cachedName.trim() || 'User';
+    } catch {
+      return 'User';
+    }
+  });
 
   useEffect(() => {
     const root = document.documentElement;
@@ -35,6 +46,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     return () => media.removeEventListener('change', apply);
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadProfile = async () => {
+      try {
+        const profile = await getUserProfile();
+        if (!active) return;
+        const nextName = profile.displayName?.trim();
+        if (nextName) {
+          setDisplayName(nextName);
+          localStorage.setItem('note_tool_display_name', nextName);
+          return;
+        }
+        setDisplayName('User');
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+      }
+    };
+
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleLogout = async () => {
     try {
       await fetch(`${API_BASE}/note_tool/auth/logout`, {
@@ -46,6 +81,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('userId');
     localStorage.removeItem('note_tool_token');
+    localStorage.removeItem('note_tool_display_name');
     router.push('/auth/login');
   };
 
@@ -81,6 +117,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 <div className="text-xs uppercase tracking-[0.3em]" style={{ color: 'var(--sidebar-muted)' }}>
                   {collapsed ? 'MP' : 'Mipun'}
                 </div>
+                {!collapsed && (
+                  <div className="mt-2 block max-w-44 truncate text-sm font-semibold tracking-tight text-slate-100" title={displayName}>
+                    Hi, {displayName}
+                  </div>
+                )}
               </div>
               <button
                 type="button"

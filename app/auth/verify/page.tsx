@@ -44,6 +44,9 @@ export default function VerifyPage() {
         setMessage(response.data.message || 'Verification successful! Redirecting to dashboard...');
         setMessageType('success');
         localStorage.setItem('note_tool_token', response.data.token);
+        if (typeof response.data.displayName === 'string') {
+          localStorage.setItem('note_tool_display_name', response.data.displayName);
+        }
         localStorage.removeItem('userId');
         setTimeout(() => {
           router.push('/boards');
