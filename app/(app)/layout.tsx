@@ -17,15 +17,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [displayName, setDisplayName] = useState(() => {
-    if (typeof window === 'undefined') return 'User';
-    try {
-      const cachedName = localStorage.getItem('note_tool_display_name') || '';
-      return cachedName.trim() || 'User';
-    } catch {
-      return 'User';
-    }
-  });
+  const [displayName, setDisplayName] = useState('User');
 
   useEffect(() => {
     const root = document.documentElement;
@@ -50,6 +42,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     let active = true;
     const loadProfile = async () => {
       try {
+        const cachedName = localStorage.getItem('note_tool_display_name') || '';
+        const cachedDisplayName = cachedName.trim();
+        if (cachedDisplayName) {
+          setDisplayName(cachedDisplayName);
+        }
+
         const profile = await getUserProfile();
         if (!active) return;
         const nextName = profile.displayName?.trim();

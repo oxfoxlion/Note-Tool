@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardPreview from '../../../components/CardPreview';
 import { Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
@@ -17,6 +17,7 @@ type RegionView = {
 
 export default function SharedBoardPage() {
   const params = useParams<{ token: string }>();
+  const router = useRouter();
   const token = params.token;
   const modeStorageKey = 'note_tool_shared_card_open_mode';
   const [boardName, setBoardName] = useState('');
@@ -247,7 +248,13 @@ export default function SharedBoardPage() {
             height: region.height,
           }))
         );
-      } catch {
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+        if (status === 403 && code === 'PASSWORD_REQUIRED') {
+          router.replace(`/shared-board/${encodeURIComponent(token)}/unlock`);
+          return;
+        }
         setError('This share link is invalid or expired.');
       } finally {
         setLoading(false);
@@ -256,7 +263,12 @@ export default function SharedBoardPage() {
     if (token) {
       void load();
     }
-  }, [token]);
+  }, [router, token]);
+
+  useEffect(() => {
+    const title = boardName.trim() || 'Shared Board';
+    document.title = `${title} | Mipun | Shao`;
+  }, [boardName]);
 
   if (loading) {
     return <div className="p-8 text-sm text-slate-500">Loading shared board...</div>;

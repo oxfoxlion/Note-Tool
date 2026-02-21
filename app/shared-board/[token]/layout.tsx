@@ -1,22 +1,19 @@
 import type { Metadata } from 'next';
 import { API_BASE } from '../../../lib/api';
-import SharedCardClient from './SharedCardClient';
 
-type SharedCardPayload = {
+type SharedBoardMetaPayload = {
   isPasswordProtected?: boolean;
   title?: string | null;
   description?: string | null;
 };
 
-async function fetchSharedCardMeta(token: string): Promise<SharedCardPayload | null> {
+async function fetchSharedBoardMeta(token: string): Promise<SharedBoardMetaPayload | null> {
   try {
-    const response = await fetch(`${API_BASE}/note_tool/card/share/${encodeURIComponent(token)}/meta`, {
+    const response = await fetch(`${API_BASE}/note_tool/board/share/${encodeURIComponent(token)}/meta`, {
       cache: 'no-store',
     });
-    if (!response.ok) {
-      return null;
-    }
-    const data = (await response.json()) as SharedCardPayload;
+    if (!response.ok) return null;
+    const data = (await response.json()) as SharedBoardMetaPayload;
     return data;
   } catch {
     return null;
@@ -24,13 +21,13 @@ async function fetchSharedCardMeta(token: string): Promise<SharedCardPayload | n
 }
 
 export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
-  const data = await fetchSharedCardMeta(params.token);
-  const title = data?.title?.trim() || 'Shared Card';
+  const data = await fetchSharedBoardMeta(params.token);
+  const boardName = data?.title?.trim() || 'Shared Board';
   const description = data?.description?.trim() || 'Connect the Mind, Punch the Memory.';
   const isPasswordProtected = Boolean(data?.isPasswordProtected);
 
   return {
-    title: `${title} | Mipun | Shao`,
+    title: `${boardName} | Mipun | Shao`,
     description,
     robots: isPasswordProtected
       ? {
@@ -44,6 +41,6 @@ export async function generateMetadata({ params }: { params: { token: string } }
   };
 }
 
-export default function SharedCardPage({ params }: { params: { token: string } }) {
-  return <SharedCardClient token={params.token} />;
+export default function SharedBoardTokenLayout({ children }: { children: React.ReactNode }) {
+  return children;
 }

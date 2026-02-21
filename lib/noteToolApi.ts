@@ -135,6 +135,7 @@ export type Board = {
   id: number;
   user_id: string;
   name: string;
+  description?: string | null;
   tags?: string[];
   created_at: string;
   card_count?: number;
@@ -164,6 +165,7 @@ export type BoardShareLink = {
   permission: 'read' | 'edit';
   expires_at: string | null;
   revoked_at: string | null;
+  password_protected?: boolean;
   created_by: string;
   created_at: string;
 };
@@ -175,8 +177,15 @@ export type CardShareLink = {
   permission: 'read' | 'edit';
   expires_at: string | null;
   revoked_at: string | null;
+  password_protected?: boolean;
   created_by: string;
   created_at: string;
+};
+
+export type SharedMetaPayload = {
+  isPasswordProtected: boolean;
+  title: string;
+  description: string;
 };
 
 export type SharedBoardPayload = {
@@ -241,7 +250,7 @@ export async function getCardBoards(cardId: number): Promise<BoardSummary[]> {
 
 export async function createCardShareLink(
   cardId: number,
-  payload?: { permission?: 'read' | 'edit'; expires_in_days?: number }
+  payload?: { permission?: 'read' | 'edit'; expires_in_days?: number; password?: string }
 ) {
   const { data } = await api.post(`/note_tool/card/${cardId}/share-links`, payload ?? {}, {
     headers: authHeaders(),
@@ -258,17 +267,27 @@ export async function getSharedCardByToken(token: string): Promise<SharedCardPay
   return data;
 }
 
+export async function unlockSharedCard(token: string, password: string) {
+  const { data } = await api.post(`/note_tool/card/share/${encodeURIComponent(token)}/unlock`, { password });
+  return data as { success: boolean };
+}
+
+export async function getSharedCardMeta(token: string): Promise<SharedMetaPayload> {
+  const { data } = await api.get(`/note_tool/card/share/${encodeURIComponent(token)}/meta`);
+  return data;
+}
+
 export async function getBoards(): Promise<Board[]> {
   const { data } = await api.get('/note_tool/board/', { headers: authHeaders() });
   return data;
 }
 
-export async function createBoard(payload: { name: string }) {
+export async function createBoard(payload: { name: string; description?: string }) {
   const { data } = await api.post('/note_tool/board/', payload, { headers: authHeaders() });
   return data as Board;
 }
 
-export async function updateBoard(boardId: number, payload: { name: string; tags?: string[] }) {
+export async function updateBoard(boardId: number, payload: { name: string; tags?: string[]; description?: string }) {
   const { data } = await api.put(`/note_tool/board/${boardId}`, payload, { headers: authHeaders() });
   return data as Board;
 }
@@ -346,7 +365,7 @@ export async function getBoardShareLinks(boardId: number): Promise<BoardShareLin
 
 export async function createBoardShareLink(
   boardId: number,
-  payload?: { permission?: 'read' | 'edit'; expires_in_days?: number }
+  payload?: { permission?: 'read' | 'edit'; expires_in_days?: number; password?: string }
 ) {
   const { data } = await api.post(`/note_tool/board/${boardId}/share-links`, payload ?? {}, {
     headers: authHeaders(),
@@ -360,6 +379,16 @@ export async function revokeBoardShareLink(boardId: number, shareLinkId: number)
 
 export async function getSharedBoardByToken(token: string): Promise<SharedBoardPayload> {
   const { data } = await api.get(`/note_tool/board/share/${encodeURIComponent(token)}`);
+  return data;
+}
+
+export async function unlockSharedBoard(token: string, password: string) {
+  const { data } = await api.post(`/note_tool/board/share/${encodeURIComponent(token)}/unlock`, { password });
+  return data as { success: boolean };
+}
+
+export async function getSharedBoardMeta(token: string): Promise<SharedMetaPayload> {
+  const { data } = await api.get(`/note_tool/board/share/${encodeURIComponent(token)}/meta`);
   return data;
 }
 

@@ -820,6 +820,8 @@ export default function CardOverlay({
         links={share.shareLinks}
         busy={share.shareBusy}
         error={share.shareError}
+        sharePassword={share.sharePassword}
+        onSharePasswordChange={share.setSharePassword}
         toShareUrl={share.toShareUrl}
         onClose={share.closeShare}
         onCreate={share.createShareLink}

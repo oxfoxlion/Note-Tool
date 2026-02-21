@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { CardShareLink } from '../../lib/noteToolApi';
 
 type CardShareLinksModalProps = {
@@ -7,6 +8,8 @@ type CardShareLinksModalProps = {
   links: CardShareLink[];
   busy: boolean;
   error: string;
+  sharePassword: string;
+  onSharePasswordChange: (value: string) => void;
   toShareUrl: (token: string) => string;
   onClose: () => void;
   onCreate: () => Promise<void> | void;
@@ -19,12 +22,16 @@ export default function CardShareLinksModal({
   links,
   busy,
   error,
+  sharePassword,
+  onSharePasswordChange,
   toShareUrl,
   onClose,
   onCreate,
   onCopy,
   onRevoke,
 }: CardShareLinksModalProps) {
+  const [showPassword, setShowPassword] = useState(false);
+
   if (!open) return null;
 
   return (
@@ -59,6 +66,48 @@ export default function CardShareLinksModal({
               Create link
             </button>
           </div>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={sharePassword}
+              onChange={(event) => onSharePasswordChange(event.target.value)}
+              minLength={6}
+              maxLength={12}
+              placeholder="Optional password (6-12 chars)"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-10 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M3 5l16 16M10.6 10.6a3 3 0 104.2 4.2M9.9 5.2A11 11 0 0121 12a11.8 11.8 0 01-3.3 4.7M6.5 8A12 12 0 003 12a11.9 11.9 0 004.1 5.5A11.2 11.2 0 0012 19a10.9 10.9 0 003.1-.5"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    fill="none"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                </svg>
+              )}
+            </button>
+          </div>
           {error && <div className="text-xs text-rose-600">{error}</div>}
           <div className="max-h-[45vh] space-y-2 overflow-y-auto">
             {links.map((link) => {
@@ -71,6 +120,11 @@ export default function CardShareLinksModal({
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-[11px]">
                       <span className="rounded-full border border-slate-300 px-2 py-0.5 text-slate-600">{link.permission}</span>
+                      {link.password_protected && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                          password
+                        </span>
+                      )}
                       {isRevoked && (
                         <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-600">revoked</span>
                       )}

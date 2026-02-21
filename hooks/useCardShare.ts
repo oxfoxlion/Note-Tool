@@ -12,6 +12,7 @@ export function useCardShare(cardId: number | null, options: UseCardShareOptions
   const [shareLinks, setShareLinks] = useState<CardShareLink[]>([]);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState('');
+  const [sharePassword, setSharePassword] = useState('');
 
   const isUnauthorized = (err: unknown) => (err as { message?: string })?.message === 'UNAUTHORIZED';
 
@@ -49,7 +50,7 @@ export function useCardShare(cardId: number | null, options: UseCardShareOptions
     setShareBusy(true);
     try {
       const links = await getCardShareLinks(effectiveCardId);
-      setShareLinks(links);
+      setShareLinks(links.filter((link) => !link.revoked_at));
       setShowShare(true);
     } catch (err: unknown) {
       if (isUnauthorized(err)) {
@@ -68,8 +69,17 @@ export function useCardShare(cardId: number | null, options: UseCardShareOptions
     setShareError('');
     setShareBusy(true);
     try {
-      const created = await createCardShareLink(cardId, { permission: 'read' });
+      const password = sharePassword.trim();
+      if (password && (password.length < 6 || password.length > 12)) {
+        setShareError('Password must be 6-12 characters.');
+        return;
+      }
+      const created = await createCardShareLink(cardId, {
+        permission: 'read',
+        password: password || undefined,
+      });
       setShareLinks((prev) => [created, ...prev]);
+      setSharePassword('');
       const copied = await copyToClipboard(toShareUrl(created.token));
       if (!copied) {
         setShareError('Link created, but auto-copy is unavailable in this browser.');
@@ -79,7 +89,10 @@ export function useCardShare(cardId: number | null, options: UseCardShareOptions
         options.onUnauthorized?.();
         return;
       }
-      setShareError('Failed to create share link.');
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to create share link.';
+      setShareError(message);
     } finally {
       setShareBusy(false);
     }
@@ -113,6 +126,8 @@ export function useCardShare(cardId: number | null, options: UseCardShareOptions
     shareLinks,
     shareBusy,
     shareError,
+    sharePassword,
+    setSharePassword,
     setShareError,
     toShareUrl,
     copyToClipboard,

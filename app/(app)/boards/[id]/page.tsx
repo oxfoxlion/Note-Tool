@@ -76,12 +76,15 @@ export default function BoardDetailPage() {
   const [showRename, setShowRename] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [tagValue, setTagValue] = useState('');
+  const [descriptionValue, setDescriptionValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [shareLinks, setShareLinks] = useState<BoardShareLink[]>([]);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState('');
+  const [sharePassword, setSharePassword] = useState('');
+  const [showSharePassword, setShowSharePassword] = useState(false);
   const [regions, setRegions] = useState<BoardRegionView[]>([]);
   const [draftRegion, setDraftRegion] = useState<Omit<BoardRegionView, 'id' | 'name'> | null>(null);
   const [showRegionName, setShowRegionName] = useState(false);
@@ -198,6 +201,7 @@ export default function BoardDetailPage() {
         setBoardName(boardData.board.name);
         setRenameValue(boardData.board.name);
         setTagValue((boardData.board.tags ?? []).join(', '));
+        setDescriptionValue(boardData.board.description ?? '');
         setCards(boardData.cards);
         setAllCards(cardsData);
         const nextPositions: Record<number, { x: number; y: number; width?: number | null }> = {};
@@ -1007,8 +1011,13 @@ export default function BoardDetailPage() {
         .split(',')
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0);
-      const updated = await updateBoard(boardId, { name: renameValue.trim(), tags });
+      const updated = await updateBoard(boardId, {
+        name: renameValue.trim(),
+        tags,
+        description: descriptionValue.trim(),
+      });
       setBoardName(updated.name);
+      setDescriptionValue(updated.description ?? descriptionValue.trim());
       setShowRename(false);
       setShowBoardMenu(false);
     } catch (err: unknown) {
@@ -1039,7 +1048,7 @@ export default function BoardDetailPage() {
     setShareBusy(true);
     try {
       const links = await getBoardShareLinks(boardId);
-      setShareLinks(links);
+      setShareLinks(links.filter((link) => !link.revoked_at));
       setShowShare(true);
     } catch (err: unknown) {
       if (isUnauthorizedError(err)) {
@@ -1083,8 +1092,17 @@ export default function BoardDetailPage() {
     setShareError('');
     setShareBusy(true);
     try {
-      const created = await createBoardShareLink(boardId, { permission: 'read' });
+      const password = sharePassword.trim();
+      if (password && (password.length < 6 || password.length > 12)) {
+        setShareError('Password must be 6-12 characters.');
+        return;
+      }
+      const created = await createBoardShareLink(boardId, {
+        permission: 'read',
+        password: password || undefined,
+      });
       setShareLinks((prev) => [created, ...prev]);
+      setSharePassword('');
       const shareUrl = toShareUrl(created.token);
       const copied = await copyToClipboard(shareUrl);
       if (!copied) {
@@ -1095,7 +1113,10 @@ export default function BoardDetailPage() {
         router.push('/auth/login');
         return;
       }
-      setShareError('Failed to create share link.');
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to create share link.';
+      setShareError(message);
     } finally {
       setShareBusy(false);
     }
@@ -1865,6 +1886,48 @@ export default function BoardDetailPage() {
                   Create link
                 </button>
               </div>
+              <div className="relative">
+                <input
+                  type={showSharePassword ? 'text' : 'password'}
+                  value={sharePassword}
+                  onChange={(event) => setSharePassword(event.target.value)}
+                  minLength={6}
+                  maxLength={12}
+                  placeholder="Optional password (6-12 chars)"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-10 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSharePassword((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  aria-label={showSharePassword ? 'Hide password' : 'Show password'}
+                  title={showSharePassword ? 'Hide password' : 'Show password'}
+                >
+                  {showSharePassword ? (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path
+                        d="M3 5l16 16M10.6 10.6a3 3 0 104.2 4.2M9.9 5.2A11 11 0 0121 12a11.8 11.8 0 01-3.3 4.7M6.5 8A12 12 0 003 12a11.9 11.9 0 004.1 5.5A11.2 11.2 0 0012 19a10.9 10.9 0 003.1-.5"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path
+                        d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        fill="none"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                    </svg>
+                  )}
+                </button>
+              </div>
               {shareError && <div className="text-xs text-rose-600">{shareError}</div>}
               <div className="max-h-[45vh] space-y-2 overflow-y-auto">
                 {shareLinks.map((link) => {
@@ -1882,6 +1945,11 @@ export default function BoardDetailPage() {
                           <span className="rounded-full border border-slate-300 px-2 py-0.5 text-slate-600">
                             {link.permission}
                           </span>
+                          {link.password_protected && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                              password
+                            </span>
+                          )}
                           {isRevoked && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-600">
                               revoked
@@ -1947,6 +2015,13 @@ export default function BoardDetailPage() {
               onChange={(event) => setTagValue(event.target.value)}
               placeholder="Tags (comma separated)"
               className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            <textarea
+              value={descriptionValue}
+              onChange={(event) => setDescriptionValue(event.target.value)}
+              placeholder="Description"
+              rows={4}
+              className="mt-3 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
             {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
             <div className="mt-4 flex items-center justify-between">

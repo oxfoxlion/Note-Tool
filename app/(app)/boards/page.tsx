@@ -14,6 +14,7 @@ export default function BoardsPage() {
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingTags, setEditingTags] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
   const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
   const [query, setQuery] = useState('');
   const [tagFilters, setTagFilters] = useState<string[]>([]);
@@ -64,6 +65,7 @@ export default function BoardsPage() {
     setEditingBoard(board);
     setEditingName(board.name);
     setEditingTags((board.tags ?? []).join(', '));
+    setEditingDescription(board.description ?? '');
     setError('');
   };
 
@@ -79,10 +81,21 @@ export default function BoardsPage() {
         .split(',')
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0);
-      const updated = await updateBoard(editingBoard.id, { name: editingName.trim(), tags });
+      const updated = await updateBoard(editingBoard.id, {
+        name: editingName.trim(),
+        tags,
+        description: editingDescription.trim(),
+      });
       setBoards((prev) =>
         prev.map((item) =>
-          item.id === updated.id ? { ...item, name: updated.name, tags: updated.tags ?? tags } : item
+          item.id === updated.id
+            ? {
+                ...item,
+                name: updated.name,
+                description: updated.description ?? editingDescription.trim(),
+                tags: updated.tags ?? tags,
+              }
+            : item
         )
       );
       setEditingBoard(null);
@@ -136,6 +149,13 @@ export default function BoardsPage() {
 
   const tagLabel =
     tagFilters.length === 0 ? 'All tags' : tagFilters.length === 1 ? tagFilters[0] : `${tagFilters.length} tags`;
+
+  const toDescriptionPreview = (description?: string | null) => {
+    const text = (description ?? '').trim();
+    if (!text) return '';
+    if (text.length <= 100) return text;
+    return `${text.slice(0, 100)}...`;
+  };
 
   return (
     <div className="space-y-8">
@@ -225,70 +245,78 @@ export default function BoardsPage() {
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredBoards.map((board) => (
+        {filteredBoards.map((board) => {
+          const descriptionPreview = toDescriptionPreview(board.description);
+          return (
           <div
             key={board.id}
-            className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            className="relative flex min-h-[170px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
-            <Link href={`/boards/${board.id}`} className="block">
+            <Link href={`/boards/${board.id}`} className="block flex-1">
               <div className="text-sm font-semibold text-slate-900">{board.name}</div>
-              <div className="mt-2 text-xs text-slate-500">
-                Cards: {board.card_count ?? 0}
-              </div>
-              {(board.tags?.length ?? 0) > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {board.tags?.map((tag) => (
-                    <span
-                      key={`${board.id}-${tag}`}
-                      className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+              {descriptionPreview && (
+                <div className="mt-2 text-xs leading-relaxed text-slate-600">{descriptionPreview}</div>
               )}
             </Link>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  handleStartEdit(board);
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"
-                aria-label="Edit board name"
-                title="Edit"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path
-                    d="M4 16.5V20h3.5L18 9.5 14.5 6 4 16.5z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    fill="none"
-                    strokeLinejoin="round"
-                  />
-                  <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="1.5" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setDeletingBoard(board);
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50"
-                aria-label="Delete board"
-                title="Delete"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                </svg>
-              </button>
+            <div className="mt-4 flex items-end justify-between gap-3">
+              <Link href={`/boards/${board.id}`} className="min-w-0 flex-1">
+                <div className="text-xs text-slate-500">Cards: {board.card_count ?? 0}</div>
+                {(board.tags?.length ?? 0) > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {board.tags?.map((tag) => (
+                      <span
+                        key={`${board.id}-${tag}`}
+                        className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Link>
+              <div className="flex shrink-0 justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleStartEdit(board);
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  aria-label="Edit board name"
+                  title="Edit"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <path
+                      d="M4 16.5V20h3.5L18 9.5 14.5 6 4 16.5z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      fill="none"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setDeletingBoard(board);
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50"
+                  aria-label="Delete board"
+                  title="Delete"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </section>
 
       <div className="fixed bottom-6 right-6 z-40">
@@ -352,6 +380,13 @@ export default function BoardsPage() {
               onChange={(event) => setEditingTags(event.target.value)}
               placeholder="Tags (comma separated)"
               className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            <textarea
+              value={editingDescription}
+              onChange={(event) => setEditingDescription(event.target.value)}
+              placeholder="Description"
+              rows={4}
+              className="mt-3 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
             {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
             <div className="mt-4 flex items-center justify-between">
