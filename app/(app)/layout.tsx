@@ -1,9 +1,8 @@
- 'use client';
+'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { Suspense } from 'react';
+import type { ReactNode, CSSProperties } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
 import {
@@ -20,6 +19,36 @@ import {
   updateBoardFolder,
 } from '../../lib/noteToolApi';
 import { useCurrentSpace } from '../../hooks/useCurrentSpace';
+import { cn } from '../../lib/utils';
+import { Button } from '../../components/ui/button';
+import ThemeSync from '../../components/theme/ThemeSync';
+import ThemeToggle from '../../components/theme/ThemeToggle';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
+import { Input } from '../../components/ui/input';
+import { ScrollArea } from '../../components/ui/scroll-area';
 
 const LEGACY_FOLDER_ORDER_STORAGE_KEY = 'note_tool_folder_order';
 const SPACE_ORDER_STORAGE_KEY = 'note_tool_space_order';
@@ -105,6 +134,11 @@ function saveSpaceOrder(ids: number[]) {
   }
 }
 
+function getApiErrorMessage(error: unknown, fallback: string) {
+  const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return typeof message === 'string' && message.trim() ? message : fallback;
+}
+
 function AppLayoutContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -129,15 +163,12 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const [renameFolderValue, setRenameFolderValue] = useState('');
   const [renameFolderError, setRenameFolderError] = useState('');
   const [deletingFolder, setDeletingFolder] = useState<BoardFolder | null>(null);
-  const boardsSectionRef = useRef<HTMLDivElement | null>(null);
-  const folderMenuAreaRef = useRef<HTMLDivElement | null>(null);
   const lastFolderMutationRef = useRef(0);
   const selectedFolderId = Number(searchParams.get('folderId'));
   const hasSelectedFolder = pathname === '/boards' && Number.isInteger(selectedFolderId) && selectedFolderId > 0;
   const currentFolders = currentSpaceId ? foldersBySpace[currentSpaceId] ?? [] : [];
 
   useEffect(() => {
-    const root = document.documentElement;
     const media = window.matchMedia('(max-width: 1024px)');
     const apply = () => {
       setIsMobile(media.matches);
@@ -145,13 +176,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     };
     apply();
     media.addEventListener('change', apply);
-    root.classList.remove('theme-light', 'theme-sand', 'theme-dark');
-    root.classList.add('theme-light');
-    const appRoot = document.getElementById('app-root');
-    if (appRoot) {
-      appRoot.classList.remove('theme-light', 'theme-sand', 'theme-dark');
-      appRoot.classList.add('theme-light');
-    }
     return () => media.removeEventListener('change', apply);
   }, []);
 
@@ -193,32 +217,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [currentSpaceId, setCurrentSpaceId]);
-
-  useEffect(() => {
-    if (openFolderMenuId === null && openSpaceMenuId === null) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!folderMenuAreaRef.current) return;
-      if (!folderMenuAreaRef.current.contains(event.target as Node)) {
-        setOpenFolderMenuId(null);
-        setOpenSpaceMenuId(null);
-      }
-    };
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [openFolderMenuId, openSpaceMenuId]);
-
-  useEffect(() => {
-    if (!showFolderCreate && creatingSpaceAfterId === null) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!boardsSectionRef.current) return;
-      if (!boardsSectionRef.current.contains(event.target as Node)) {
-        setShowFolderCreate(false);
-        setCreatingSpaceAfterId(null);
-      }
-    };
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [showFolderCreate, creatingSpaceAfterId]);
 
   const updateFoldersForSpace = (spaceId: number, updater: (folders: BoardFolder[]) => BoardFolder[]) => {
     setFoldersBySpace((prev) => ({
@@ -330,10 +328,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       setSpaceError('');
       router.push('/boards');
     } catch (error: unknown) {
-      const message =
-        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        'Failed to create space.';
-      setSpaceError(message);
+      setSpaceError(getApiErrorMessage(error, 'Failed to create space.'));
     }
   };
 
@@ -352,8 +347,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       });
       setExpandedSpaceIds((prev) => prev.filter((id) => id !== deletedId));
       setOpenSpaceMenuId(null);
-      const fallbackSpace =
-        remainingSpaces.find((space) => space.is_default) ?? remainingSpaces[0] ?? null;
+      const fallbackSpace = remainingSpaces.find((space) => space.is_default) ?? remainingSpaces[0] ?? null;
       if (currentSpaceId === deletedId) {
         setCurrentSpaceId(fallbackSpace?.id ?? null);
         router.push('/boards');
@@ -361,10 +355,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       setDeletingSpace(null);
       setSpaceError('');
     } catch (error: unknown) {
-      const message =
-        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        'Failed to delete space.';
-      setSpaceError(message);
+      setSpaceError(getApiErrorMessage(error, 'Failed to delete space.'));
     }
   };
 
@@ -480,7 +471,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       }
     };
 
-    loadProfile();
+    void loadProfile();
     return () => {
       active = false;
     };
@@ -503,15 +494,16 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="min-h-screen text-[color:var(--app-foreground)] theme-light"
+      className="min-h-screen text-[color:var(--app-foreground)]"
       id="app-root"
       style={
         {
           background: 'var(--app-bg)',
           '--sidebar-width': collapsed ? '0rem' : '16rem',
-        } as React.CSSProperties
+        } as CSSProperties
       }
     >
+      <ThemeSync />
       <div className="relative flex min-h-screen">
         {!collapsed && (
           <button
@@ -521,6 +513,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
             aria-label="Close sidebar"
           />
         )}
+
         <aside
           className={`fixed inset-y-0 left-0 z-50 flex h-screen shrink-0 flex-col overflow-y-auto overflow-x-visible transition-all duration-300 lg:static lg:z-auto ${
             collapsed ? 'w-0 lg:w-0' : 'w-full lg:w-64'
@@ -534,7 +527,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                   {collapsed ? 'MP' : 'Mipun'}
                 </div>
                 {!collapsed && (
-                  <div className="mt-2 block max-w-44 truncate text-sm font-semibold tracking-tight text-slate-100" title={displayName}>
+                  <div className="mt-2 block max-w-44 truncate text-sm font-semibold tracking-tight" style={{ color: 'var(--sidebar-fg)' }} title={displayName}>
                     Hi, {displayName}
                   </div>
                 )}
@@ -542,7 +535,12 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => setCollapsed((prev) => !prev)}
-                className="rounded-full border border-slate-700/50 p-2 text-slate-200/80 hover:bg-slate-800/60"
+                className="rounded-full border p-2"
+                style={{
+                  borderColor: 'var(--sidebar-border)',
+                  color: 'var(--sidebar-fg)',
+                  background: 'transparent',
+                }}
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
@@ -556,31 +554,58 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                 </svg>
               </button>
             </div>
+            {!collapsed && (
+              <div className="mt-4 flex items-center gap-2">
+                <ThemeToggle
+                  className="h-9 w-9 rounded-full text-xs"
+                  style={{
+                    color: 'var(--sidebar-fg)',
+                  }}
+                  variant="outline"
+                />
+              </div>
+            )}
           </div>
+
           <nav className={`mt-8 flex-1 space-y-1 ${collapsed ? 'px-2' : 'px-4'}`}>
-            <div ref={boardsSectionRef} className="rounded-lg">
-              <div ref={folderMenuAreaRef} className="space-y-2">
+            <ScrollArea className="h-[calc(100vh-14rem)] pr-1">
+              <div className="space-y-2">
                 {spaces.map((space) => {
                   const isCurrentSpace = currentSpaceId === space.id;
                   const isExpanded = expandedSpaceIds.includes(space.id) || isCurrentSpace;
                   const folders = foldersBySpace[space.id] ?? [];
+
                   return (
                     <div key={space.id} className="rounded-lg">
                       <div
-                        className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-slate-800/60 hover:text-white ${
-                          isCurrentSpace ? 'bg-slate-800/70 text-white' : ''
-                        }`}
+                        className={cn(
+                          'flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-medium transition',
+                          isCurrentSpace && 'font-semibold'
+                        )}
+                        style={{
+                          borderColor: isCurrentSpace ? 'var(--sidebar-border)' : 'transparent',
+                          background: isCurrentSpace ? 'var(--sidebar-active)' : 'transparent',
+                          color: 'var(--sidebar-fg)',
+                        }}
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <button
                             type="button"
                             onClick={() => toggleSpaceExpanded(space.id)}
-                            className="rounded p-0.5 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            className="rounded p-0.5"
+                            style={{ color: 'var(--sidebar-muted)' }}
                             aria-label={isExpanded ? `Collapse ${space.name}` : `Expand ${space.name}`}
                             title={isExpanded ? 'Collapse' : 'Expand'}
                           >
                             <svg viewBox="0 0 16 16" className={`h-3.5 w-3.5 transition ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">
-                              <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                              <path
+                                d="M6 3l5 5-5 5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
                             </svg>
                           </button>
                           <button
@@ -592,147 +617,83 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                             <span className="block truncate">{space.name}</span>
                           </button>
                         </div>
+
                         {!collapsed && (
-                          <button
-                            type="button"
-                            onClick={() => {
+                          <DropdownMenu
+                            open={openSpaceMenuId === space.id}
+                            onOpenChange={(open) => {
                               setOpenFolderMenuId(null);
-                              setOpenSpaceMenuId((prev) => (prev === space.id ? null : space.id));
+                              setOpenSpaceMenuId(open ? space.id : null);
                             }}
-                            className="ml-2 rounded-full px-1.5 py-1 text-[11px] text-slate-300 hover:bg-slate-700 hover:text-white"
-                            title="Space actions"
-                            aria-label={`Space actions for ${space.name}`}
                           >
-                            ...
-                          </button>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="ml-2 h-8 w-8 rounded-full"
+                                style={{ color: 'var(--sidebar-fg)' }}
+                                title="Space actions"
+                                aria-label={`Space actions for ${space.name}`}
+                              >
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                                  <circle cx="5" cy="12" r="1.7" fill="currentColor" />
+                                  <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                                  <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                                </svg>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-44"
+                              style={{
+                                borderColor: 'var(--sidebar-border)',
+                                background: 'var(--sidebar-bg)',
+                                color: 'var(--sidebar-fg)',
+                              }}
+                            >
+                              <DropdownMenuItem onClick={() => handleOpenCreateFolder(space.id)}>
+                                Create folder
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenCreateSpace(space.id)}>
+                                Add space below
+                              </DropdownMenuItem>
+                              {!space.is_default && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setOpenSpaceMenuId(null);
+                                    setDeletingSpace(space);
+                                    setSpaceError('');
+                                  }}
+                                  className="text-rose-400 focus:text-rose-300"
+                                >
+                                  Delete space
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
-
-                      {openSpaceMenuId === space.id && (
-                        <div className="relative">
-                          <div className="absolute right-2 top-1 z-30 w-40 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCreateFolder(space.id)}
-                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                            >
-                              Create folder
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCreateSpace(space.id)}
-                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                            >
-                              Add space below
-                            </button>
-                            {!space.is_default && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenSpaceMenuId(null);
-                                  setDeletingSpace(space);
-                                  setSpaceError('');
-                                }}
-                                className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-slate-800 hover:text-rose-200"
-                              >
-                                Delete space
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
 
                       {!collapsed && isExpanded && (
                         <div className="mt-1 space-y-1 pl-6 pr-1">
                           <button
                             type="button"
                             onClick={() => handleSelectSpaceRoute(space.id, '/cards')}
-                            className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-xs transition ${
-                              pathname === '/cards' && isCurrentSpace
-                                ? 'bg-slate-800/70 text-white'
-                                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                            }`}
+                            className="flex w-full items-center rounded-md px-3 py-1.5 text-left text-xs transition"
+                            style={{
+                              background:
+                                pathname === '/cards' && isCurrentSpace ? 'var(--sidebar-active)' : 'transparent',
+                              color: 'var(--sidebar-fg)',
+                            }}
                             title="Card Box"
                           >
                             Card Box
                           </button>
 
-                          {isCurrentSpace && showFolderCreate && (
-                            <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-2">
-                              <input
-                                value={newFolderName}
-                                onChange={(event) => {
-                                  setNewFolderName(event.target.value);
-                                  if (folderError) {
-                                    setFolderError('');
-                                  }
-                                }}
-                                placeholder="Folder name"
-                                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                              />
-                              {folderError && <div className="mt-1 text-[11px] text-rose-300">{folderError}</div>}
-                              <div className="mt-2 flex items-center justify-between">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowFolderCreate(false);
-                                    setNewFolderName('');
-                                    setFolderError('');
-                                  }}
-                                  className="text-[11px] text-slate-300 hover:text-white"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleCreateFolder}
-                                  className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-900"
-                                >
-                                  Create
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {creatingSpaceAfterId === space.id && (
-                            <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-2">
-                              <input
-                                value={newSpaceName}
-                                onChange={(event) => {
-                                  setNewSpaceName(event.target.value);
-                                  if (spaceError) {
-                                    setSpaceError('');
-                                  }
-                                }}
-                                placeholder="Space name"
-                                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                              />
-                              {spaceError && <div className="mt-1 text-[11px] text-rose-300">{spaceError}</div>}
-                              <div className="mt-2 flex items-center justify-between">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCreatingSpaceAfterId(null);
-                                    setNewSpaceName('');
-                                    setSpaceError('');
-                                  }}
-                                  className="text-[11px] text-slate-300 hover:text-white"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleCreateSpaceBelow(space.id)}
-                                  className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-900"
-                                >
-                                  Create
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
                           {folders.map((folder) => {
                             const active = isCurrentSpace && hasSelectedFolder && selectedFolderId === folder.id;
+
                             return (
                               <div key={folder.id} className="relative">
                                 <button
@@ -742,83 +703,74 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                                     setOpenFolderMenuId(null);
                                     handleSelectSpaceRoute(space.id, `/boards?folderId=${folder.id}`);
                                   }}
-                                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-xs transition ${
-                                    active ? 'bg-slate-800/70 text-white' : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                                  }`}
+                                  className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-xs transition"
+                                  style={{
+                                    background: active ? 'var(--sidebar-active)' : 'transparent',
+                                    color: 'var(--sidebar-fg)',
+                                  }}
                                   title={folder.name}
                                 >
                                   <span className="truncate pr-10">{folder.name}</span>
                                 </button>
+
                                 {!folder.is_system && isCurrentSpace && (
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      setOpenFolderMenuId((prev) => (prev === folder.id ? null : folder.id));
-                                    }}
-                                    className={`absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-[11px] ${
-                                      active ? 'text-slate-100 hover:bg-slate-700' : 'text-slate-300 hover:bg-slate-700/80'
-                                    }`}
-                                    aria-label={`Folder actions for ${folder.name}`}
-                                    title="Folder actions"
+                                  <DropdownMenu
+                                    open={openFolderMenuId === folder.id}
+                                    onOpenChange={(open) => setOpenFolderMenuId(open ? folder.id : null)}
                                   >
-                                    ...
-                                  </button>
-                                )}
-                                {openFolderMenuId === folder.id && !folder.is_system && isCurrentSpace && (
-                                  <div className="absolute right-1 top-full z-30 mt-1 w-36 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        void moveFolderByOffset(folder.id, -1);
-                                        setOpenFolderMenuId(null);
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full"
+                                        style={{ color: 'var(--sidebar-fg)' }}
+                                        aria-label={`Folder actions for ${folder.name}`}
+                                        title="Folder actions"
+                                      >
+                                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                                          <circle cx="5" cy="12" r="1.7" fill="currentColor" />
+                                          <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                                          <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                                        </svg>
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                      align="end"
+                                      className="w-40"
+                                      style={{
+                                        borderColor: 'var(--sidebar-border)',
+                                        background: 'var(--sidebar-bg)',
+                                        color: 'var(--sidebar-fg)',
                                       }}
-                                      className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
                                     >
-                                      Move up
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        void moveFolderByOffset(folder.id, 1);
-                                        setOpenFolderMenuId(null);
-                                      }}
-                                      className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                                    >
-                                      Move down
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        setOpenFolderMenuId(null);
-                                        setRenamingFolder(folder);
-                                        setRenameFolderValue(folder.name);
-                                        setRenameFolderError('');
-                                      }}
-                                      className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                                    >
-                                      Rename folder
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        setOpenFolderMenuId(null);
-                                        setDeletingFolder(folder);
-                                      }}
-                                      className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-slate-800 hover:text-rose-200"
-                                    >
-                                      Delete folder
-                                    </button>
-                                  </div>
+                                      <DropdownMenuItem onClick={() => void moveFolderByOffset(folder.id, -1)}>
+                                        Move up
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => void moveFolderByOffset(folder.id, 1)}>
+                                        Move down
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setOpenFolderMenuId(null);
+                                          setRenamingFolder(folder);
+                                          setRenameFolderValue(folder.name);
+                                          setRenameFolderError('');
+                                        }}
+                                      >
+                                        Rename folder
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setOpenFolderMenuId(null);
+                                          setDeletingFolder(folder);
+                                        }}
+                                        className="text-rose-400 focus:text-rose-300"
+                                      >
+                                        Delete folder
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 )}
                               </div>
                             );
@@ -829,7 +781,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                   );
                 })}
               </div>
-            </div>
+            </ScrollArea>
 
             <Link
               href="/settings"
@@ -838,30 +790,37 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                   setCollapsed(true);
                 }
               }}
-              className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-slate-800/60 hover:text-white ${
-                pathname === '/settings' ? 'bg-slate-800/70 text-white' : ''
-              }`}
-              title="Setting"
+              className="mt-2 flex items-center rounded-lg px-3 py-2 text-sm font-medium transition"
+              style={{
+                background: pathname === '/settings' ? 'var(--sidebar-active)' : 'transparent',
+                color: 'var(--sidebar-fg)',
+              }}
+              title="Settings"
             >
-              <span>Setting</span>
+              <span>Settings</span>
             </Link>
           </nav>
+
           <div className="px-4 pb-6 pt-10">
             {!collapsed && (
               <div className="text-xs" style={{ color: 'var(--sidebar-muted)' }}>
                 Connect the Mind, Punch the Memory.
               </div>
             )}
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={handleLogout}
-              className={`mt-4 w-full rounded-lg border border-slate-700/50 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800/60 ${
-                collapsed ? 'px-0' : ''
-              }`}
+              className={cn('mt-4 w-full bg-transparent text-xs font-semibold', collapsed && 'px-0')}
+              style={{
+                borderColor: 'var(--sidebar-border)',
+                color: 'var(--sidebar-fg)',
+              }}
             >
               {collapsed ? '⏻' : 'Logout'}
-            </button>
+            </Button>
           </div>
+
           {!collapsed && (
             <div
               className="mt-auto border-t border-slate-700/40 px-4 pb-6 pt-4 text-center text-[11px] tracking-[0.08em]"
@@ -871,6 +830,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
             </div>
           )}
         </aside>
+
         {collapsed && (
           <button
             type="button"
@@ -884,81 +844,127 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
             </svg>
           </button>
         )}
+
         <main className="app-main flex-1">
-          <div className={`py-8 ${collapsed ? 'pl-16 pr-6 md:pl-20 md:pr-10' : 'px-6 md:px-10'}`}>
-            {children}
-          </div>
+          <div className={`py-8 ${collapsed ? 'pl-16 pr-6 md:pl-20 md:pr-10' : 'px-6 md:px-10'}`}>{children}</div>
         </main>
       </div>
 
-      {deletingFolder && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete folder</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
-            <p className="mt-3 text-sm text-slate-600">
-              This will delete &quot;{deletingFolder.name}&quot;. Boards inside will move to no folder.
-            </p>
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setDeletingFolder(null)}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleDeleteFolder(deletingFolder);
-                }}
-                className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
-              >
-                Delete
-              </button>
-            </div>
+      <Dialog
+        open={showFolderCreate}
+        onOpenChange={(open) => {
+          if (open) return;
+          setShowFolderCreate(false);
+          setNewFolderName('');
+          setFolderError('');
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create folder</DialogTitle>
+            <DialogDescription>Create a board folder in the selected space.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={newFolderName}
+              onChange={(event) => {
+                setNewFolderName(event.target.value);
+                if (folderError) {
+                  setFolderError('');
+                }
+              }}
+              placeholder="Folder name"
+            />
+            {folderError && <div className="text-xs text-rose-600">{folderError}</div>}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowFolderCreate(false);
+                setNewFolderName('');
+                setFolderError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateFolder}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {deletingSpace && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete space</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
-            <p className="mt-3 text-sm text-slate-600">
-              This will delete &quot;{deletingSpace.name}&quot; and everything inside this space.
-            </p>
-            {spaceError && <div className="mt-2 text-xs text-rose-600">{spaceError}</div>}
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setDeletingSpace(null);
+      <Dialog
+        open={creatingSpaceAfterId !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setCreatingSpaceAfterId(null);
+          setNewSpaceName('');
+          setSpaceError('');
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create space</DialogTitle>
+            <DialogDescription>Add a new space below the selected one.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={newSpaceName}
+              onChange={(event) => {
+                setNewSpaceName(event.target.value);
+                if (spaceError) {
                   setSpaceError('');
-                }}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDeleteSpace()}
-                className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
-              >
-                Delete
-              </button>
-            </div>
+                }
+              }}
+              placeholder="Space name"
+            />
+            {spaceError && <div className="text-xs text-rose-600">{spaceError}</div>}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCreatingSpaceAfterId(null);
+                setNewSpaceName('');
+                setSpaceError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (creatingSpaceAfterId !== null) {
+                  void handleCreateSpaceBelow(creatingSpaceAfterId);
+                }
+              }}
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {renamingFolder && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Rename folder</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Update name</h3>
-            <input
+      <Dialog
+        open={renamingFolder !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setRenamingFolder(null);
+          setRenameFolderValue('');
+          setRenameFolderError('');
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename folder</DialogTitle>
+            <DialogDescription>Update the folder name without changing its boards.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
               value={renameFolderValue}
               onChange={(event) => {
                 setRenameFolderValue(event.target.value);
@@ -967,34 +973,96 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                 }
               }}
               placeholder="Folder name"
-              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
-            {renameFolderError && <div className="mt-2 text-xs text-rose-600">{renameFolderError}</div>}
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setRenamingFolder(null);
-                  setRenameFolderValue('');
-                  setRenameFolderError('');
-                }}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleRenameFolder(renamingFolder, renameFolderValue);
-                }}
-                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
-              >
-                Save
-              </button>
-            </div>
+            {renameFolderError && <div className="text-xs text-rose-600">{renameFolderError}</div>}
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setRenamingFolder(null);
+                setRenameFolderValue('');
+                setRenameFolderError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (renamingFolder) {
+                  void handleRenameFolder(renamingFolder, renameFolderValue);
+                }
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={deletingFolder !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeletingFolder(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete folder</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingFolder
+                ? `This will delete "${deletingFolder.name}". Boards inside will move to no folder.`
+                : 'This will delete the selected folder.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              onClick={() => {
+                if (deletingFolder) {
+                  void handleDeleteFolder(deletingFolder);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deletingSpace !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeletingSpace(null);
+          setSpaceError('');
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete space</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingSpace
+                ? `This will delete "${deletingSpace.name}" and everything inside this space.`
+                : 'This will delete the selected space.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {spaceError && <div className="text-xs text-rose-600">{spaceError}</div>}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              onClick={() => void handleDeleteSpace()}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

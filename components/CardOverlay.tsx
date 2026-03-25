@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import { useRouter } from 'next/navigation';
 import MDEditor from '@uiw/react-md-editor';
-import { createPortal } from 'react-dom';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
@@ -18,6 +17,12 @@ import CardShareLinksModal from './cards/CardShareLinksModal';
 import CardRemoveFromBoardModal from './cards/CardRemoveFromBoardModal';
 import CardCopyToSpaceModal from './cards/CardCopyToSpaceModal';
 import { copyCardToSpace, getSpaces, Space } from '../lib/noteToolApi';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { Button } from './ui/button';
+import { Dialog, DialogContent } from './ui/dialog';
+import { Input } from './ui/input';
+import { Sheet, SheetContent } from './ui/sheet';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 
 type CardOverlayProps = {
   card: Card;
@@ -72,7 +77,6 @@ export default function CardOverlay({
   const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
   const [copyError, setCopyError] = useState('');
   const [copySuccessMessage, setCopySuccessMessage] = useState('');
-  const [mounted, setMounted] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const prevCardIdRef = useRef(card.id);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -95,10 +99,6 @@ export default function CardOverlay({
     setMentionStart(null);
     setShowCardMenu(false);
   }, [card.id, card.title, card.content]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!showCopyToSpace) return;
@@ -372,11 +372,11 @@ export default function CardOverlay({
   };
 
   const renderToolbar = () => (
-    <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600">
+    <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card px-2 py-2 text-xs text-muted-foreground">
       <button
         type="button"
         onClick={incrementHeading}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Heading (add #)"
         aria-label="Heading"
       >
@@ -385,7 +385,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => wrapSelection('**')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Bold"
         aria-label="Bold"
       >
@@ -394,7 +394,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => wrapSelection('*')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Italic"
         aria-label="Italic"
       >
@@ -403,7 +403,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => wrapSelection('<u>', '</u>')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Underline"
         aria-label="Underline"
       >
@@ -412,7 +412,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => wrapSelection('~~')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Strikethrough"
         aria-label="Strikethrough"
       >
@@ -421,7 +421,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => wrapSelection('`')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Inline code"
         aria-label="Inline code"
       >
@@ -430,7 +430,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => insertLinePrefix('- ')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Bulleted list"
         aria-label="Bulleted list"
       >
@@ -444,7 +444,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={insertOrderedList}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Numbered list"
         aria-label="Numbered list"
       >
@@ -456,7 +456,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => insertLinePrefix('> ')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Quote"
         aria-label="Quote"
       >
@@ -468,7 +468,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => insertLinePrefix('- [ ] ')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Checkbox"
         aria-label="Checkbox"
       >
@@ -481,7 +481,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => insertBlock('\n| Column | Column |\n| --- | --- |\n| Cell | Cell |\n')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Table"
         aria-label="Table"
       >
@@ -493,7 +493,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => wrapSelection('[', '](url)')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Link"
         aria-label="Link"
       >
@@ -515,7 +515,7 @@ export default function CardOverlay({
       <button
         type="button"
         onClick={() => insertBlock('\n![image](https://example.png)\n')}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
         title="Image"
         aria-label="Image"
       >
@@ -554,7 +554,7 @@ export default function CardOverlay({
     return (
       <div
         data-color-mode="light"
-        className="[&_.w-md-editor]:min-h-[280px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-slate-200 [&_.w-md-editor]:bg-slate-50 [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-pre]:text-sm"
+        className="card-editor-surface [&_.w-md-editor]:min-h-[280px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-border [&_.w-md-editor]:bg-muted [&_.w-md-editor]:text-card-foreground [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-input]:text-card-foreground [&_.w-md-editor-text-pre]:text-sm [&_.w-md-editor-text-pre]:text-card-foreground [&_.w-md-editor-text-container]:bg-muted [&_.wmde-markdown]:bg-muted [&_.wmde-markdown]:text-card-foreground"
       >
         <MDEditor
           value={content}
@@ -576,16 +576,6 @@ export default function CardOverlay({
       </div>
     );
   };
-
-  const wrapperClass =
-    mode === 'modal'
-      ? 'fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4'
-      : 'fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-white shadow-2xl';
-
-  const panelClass =
-    mode === 'modal'
-      ? 'w-full max-w-2xl rounded-2xl bg-white shadow-2xl'
-      : 'h-full w-full overflow-y-auto';
 
   const handleViewClickCapture = (event: React.MouseEvent<HTMLElement>) => {
     const target = event.target as HTMLElement | null;
@@ -668,30 +658,22 @@ export default function CardOverlay({
       : []),
   ];
 
-  const overlay = (
-    <div className={wrapperClass} role="dialog" aria-modal="true">
-      {mode === 'modal' && (
-        <button
-          type="button"
-          aria-label="Close"
-          className="absolute inset-0 h-full w-full cursor-default"
-          onClick={onClose}
-        />
-      )}
-      <div className={`relative ${panelClass} flex h-full flex-col`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
-          <nav className="flex flex-1 items-center gap-2 text-xs font-medium text-slate-500">
-            <button type="button" onClick={onClose} className="hover:text-slate-700">
+  const panelBody = (
+    <>
+      <div className="relative flex h-full flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
+          <nav className="flex flex-1 items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Button type="button" variant="ghost" onClick={onClose} className="h-auto px-0 py-0 text-xs text-muted-foreground hover:bg-transparent hover:text-card-foreground">
               {breadcrumbRootLabel}
-            </button>
+            </Button>
             <span>/</span>
             {readOnly ? (
-              <div className="w-28 truncate p-0 text-xs font-semibold text-slate-700 sm:w-40">{title || 'Untitled'}</div>
+              <div className="w-28 truncate p-0 text-xs font-semibold text-card-foreground sm:w-40">{title || 'Untitled'}</div>
             ) : (
-              <input
+              <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="w-28 border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 focus:outline-none sm:w-40"
+                className="h-auto w-28 border-0 bg-transparent p-0 text-xs font-semibold text-card-foreground shadow-none ring-0 focus-visible:ring-0 sm:w-40"
                 placeholder="Untitled"
               />
             )}
@@ -699,57 +681,35 @@ export default function CardOverlay({
           <div className="flex items-center gap-2">
             {!readOnly && (
               <>
-                <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('edit')}
-                    className={`rounded-full p-2 ${
-                      viewMode === 'edit' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                    aria-label="Edit"
-                    title="Edit"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                      <path
-                        d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                      />
-                      <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('view')}
-                    className={`rounded-full p-2 ${
-                      viewMode === 'view' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                    aria-label="Preview"
-                    title="Preview"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                      <path
-                        d="M2.5 12c2.2-4.2 6.6-7 9.5-7s7.3 2.8 9.5 7c-2.2 4.2-6.6 7-9.5 7s-7.3-2.8-9.5-7z"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                      />
-                      <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    </svg>
-                  </button>
-                </div>
-                <button
+                <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'view' | 'edit')}>
+                  <TabsList className="rounded-full">
+                    <TabsTrigger value="edit" className="rounded-full px-3" aria-label="Edit" title="Edit">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                        <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                        <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                      </svg>
+                    </TabsTrigger>
+                    <TabsTrigger value="view" className="rounded-full px-3" aria-label="Preview" title="Preview">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                        <path d="M2.5 12c2.2-4.2 6.6-7 9.5-7s7.3 2.8 9.5 7c-2.2 4.2-6.6 7-9.5 7s-7.3-2.8-9.5-7z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                        <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                      </svg>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon"
                   onClick={() => router.push(`/cards/${card.id}`)}
-                  className="rounded-full border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                  className="rounded-full"
                   aria-label="Open full page"
                   title="Open full page"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                     <path d="M7 3H3v4M21 7V3h-4M3 17v4h4M17 21h4v-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
                   </svg>
-                </button>
+                </Button>
               </>
             )}
             {(onDelete || onRemoveFromBoard) && (
@@ -760,44 +720,42 @@ export default function CardOverlay({
                 actions={actionItems}
               />
             )}
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="icon"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className="rounded-full"
               aria-label="Close"
               title="Close"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                 <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
-            </button>
+            </Button>
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
           {!readOnly && viewMode === 'edit' ? (
             <div className="space-y-4">
-              <input
+              <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="w-full border-0 bg-transparent px-0 py-1 text-sm font-semibold text-slate-900 focus:outline-none"
+                className="w-full border-0 bg-transparent px-0 py-1 text-sm font-semibold text-card-foreground shadow-none ring-0 focus-visible:ring-0"
                 placeholder="Card title"
               />
               {renderToolbar()}
               <div className="relative flex-1 min-h-0 overflow-visible">
                 {renderEditor()}
                 {showMentions && (
-                  <div className="absolute z-50 mt-2 w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg">
-                    <div className="border-b border-slate-200 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+                  <div className="absolute z-50 mt-2 w-full max-w-sm rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg">
+                    <div className="border-b border-border px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
                       Link card
                     </div>
                     <div className="max-h-52 overflow-y-auto p-2">
                       {allCards
                         .filter((item) => item.id !== card.id)
-                        .filter((item) =>
-                          mentionQuery
-                            ? item.title.toLowerCase().includes(mentionQuery.toLowerCase())
-                            : true
-                        )
+                        .filter((item) => (mentionQuery ? item.title.toLowerCase().includes(mentionQuery.toLowerCase()) : true))
                         .slice(0, 8)
                         .map((item) => (
                           <button
@@ -822,36 +780,30 @@ export default function CardOverlay({
                                 el.selectionEnd = pos;
                               });
                             }}
-                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-popover-foreground transition hover:bg-accent hover:text-accent-foreground"
                           >
                             <span className="truncate">{item.title}</span>
-                            <span className="text-xs text-slate-400">#{item.id}</span>
+                            <span className="text-xs text-muted-foreground">#{item.id}</span>
                           </button>
                         ))}
                       {allCards.filter((item) => item.id !== card.id).length === 0 && (
-                        <div className="px-3 py-2 text-xs text-slate-400">No cards available.</div>
+                        <div className="px-3 py-2 text-xs text-muted-foreground">No cards available.</div>
                       )}
                     </div>
                   </div>
                 )}
               </div>
-              <div className="flex justify-end text-xs text-slate-500">
-                {isSaving ? 'Saving…' : 'Autosave on'}
-              </div>
+              <div className="flex justify-end text-xs text-muted-foreground">{isSaving ? 'Saving…' : 'Autosave on'}</div>
             </div>
           ) : (
             <div className="space-y-6" onClickCapture={handleViewClickCapture}>
-              <article className="prose max-w-none text-sm leading-relaxed text-slate-700">
+              <article className="card-preview-surface prose max-w-none text-sm leading-relaxed text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground">
                 {renderMarkdown(content || 'No content yet.')}
               </article>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Linked cards
-                </div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Linked cards</div>
                 <div className="mt-3 space-y-2">
-                  {linkedCards.length === 0 && (
-                    <div className="text-sm text-slate-500">No linked cards.</div>
-                  )}
+                  {linkedCards.length === 0 && <div className="text-sm text-muted-foreground">No linked cards.</div>}
                   {linkedCards.map((item) => (
                     <button
                       key={item.id}
@@ -863,10 +815,10 @@ export default function CardOverlay({
                         }
                         router.push(`/cards/${item.id}`);
                       }}
-                      className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2 text-left text-sm text-card-foreground transition hover:bg-accent hover:text-accent-foreground"
                     >
                       <span className="truncate">@{item.title}</span>
-                      <span className="text-xs text-slate-400">#{item.id}</span>
+                      <span className="text-xs text-muted-foreground">#{item.id}</span>
                     </button>
                   ))}
                 </div>
@@ -940,36 +892,43 @@ export default function CardOverlay({
       />
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-rose-400">Confirm</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Delete this card?</h3>
-            <p className="mt-2 text-sm text-slate-600">This will permanently delete the card.</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this card?</AlertDialogTitle>
+              <AlertDialogDescription>This will permanently delete the card.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-rose-600 text-white hover:bg-rose-700"
                 onClick={() => {
                   setShowDeleteConfirm(false);
                   onDelete?.();
                 }}
-                className="rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white"
               >
                 Delete
-              </button>
-            </div>
-          </div>
-        </div>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
-    </div>
+    </>
   );
 
-  if (!mounted) return null;
-  return createPortal(overlay, document.body);
+  const overlay = mode === 'modal' ? (
+    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+        {panelBody}
+      </DialogContent>
+    </Dialog>
+  ) : (
+    <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <SheetContent side="right" className="h-full w-full max-w-xl overflow-hidden p-0">
+        {panelBody}
+      </SheetContent>
+    </Sheet>
+  );
+
+  return overlay;
 }

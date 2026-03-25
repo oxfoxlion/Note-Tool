@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -17,6 +17,28 @@ import {
 } from '../../../lib/noteToolApi';
 import { useCurrentSpace } from '../../../hooks/useCurrentSpace';
 import BoardCopyToSpaceModal from '../../../components/boards/BoardCopyToSpaceModal';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../../components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../../components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { Textarea } from '../../../components/ui/textarea';
 
 function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && error.message === 'UNAUTHORIZED';
@@ -39,17 +61,14 @@ export default function BoardsPage() {
   const [deletingBoard, setDeletingBoard] = useState<Board | null>(null);
   const [query, setQuery] = useState('');
   const [tagFilters, setTagFilters] = useState<string[]>([]);
-  const [showTagMenu, setShowTagMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [page, setPage] = useState(1);
-  const [openBoardMenuId, setOpenBoardMenuId] = useState<number | null>(null);
+  const [pageState, setPageState] = useState({ key: '', value: 1 });
   const [copyingBoard, setCopyingBoard] = useState<Board | null>(null);
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
   const [copyError, setCopyError] = useState('');
   const [copySuccessMessage, setCopySuccessMessage] = useState('');
   const [viewportTier, setViewportTier] = useState<'sm' | 'md' | 'xl'>('xl');
-  const tagMenuRef = useRef<HTMLDivElement | null>(null);
   const selectedFolderId = (() => {
     const raw = searchParams.get('folderId');
     if (!raw) return null;
@@ -103,18 +122,6 @@ export default function BoardsPage() {
   }, [router, selectedFolderId, currentSpaceId]);
 
   useEffect(() => {
-    if (!showTagMenu) return;
-    const handleClick = (event: MouseEvent) => {
-      if (!tagMenuRef.current) return;
-      if (!tagMenuRef.current.contains(event.target as Node)) {
-        setShowTagMenu(false);
-      }
-    };
-    window.addEventListener('mousedown', handleClick);
-    return () => window.removeEventListener('mousedown', handleClick);
-  }, [showTagMenu]);
-
-  useEffect(() => {
     if (!copyingBoard) return;
     let active = true;
     const loadSpaces = async () => {
@@ -132,13 +139,6 @@ export default function BoardsPage() {
       active = false;
     };
   }, [copyingBoard]);
-
-  useEffect(() => {
-    if (openBoardMenuId === null) return;
-    const handleClick = () => setOpenBoardMenuId(null);
-    window.addEventListener('mousedown', handleClick);
-    return () => window.removeEventListener('mousedown', handleClick);
-  }, [openBoardMenuId]);
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -302,14 +302,10 @@ export default function BoardsPage() {
     });
   }, [boards, query, tagFilters]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [query, selectedFolderId, tagFilters, boards.length, viewportTier]);
-
   const pageSize = viewportTier === 'xl' ? 9 : viewportTier === 'md' ? 6 : 3;
-
+  const pageResetKey = `${query}::${selectedFolderId ?? 'all'}::${tagFilters.slice().sort().join(',')}::${boards.length}::${viewportTier}`;
   const totalPages = Math.max(1, Math.ceil(filteredBoards.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
+  const currentPage = pageState.key === pageResetKey ? Math.min(pageState.value, totalPages) : 1;
   const pagedBoards = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredBoards.slice(start, start + pageSize);
@@ -318,26 +314,34 @@ export default function BoardsPage() {
   const tagLabel =
     tagFilters.length === 0 ? 'All tags' : tagFilters.length === 1 ? tagFilters[0] : `${tagFilters.length} tags`;
 
+  const setPage = (updater: number | ((prev: number) => number)) => {
+    setPageState((prev) => {
+      const base = prev.key === pageResetKey ? prev.value : 1;
+      const nextValue = typeof updater === 'function' ? updater(base) : updater;
+      return { key: pageResetKey, value: nextValue };
+    });
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Boards</div>
-          {selectedFolder && (
-            <div className="mt-1 text-xs text-slate-500">Folder: {selectedFolder.name}</div>
-          )}
+          <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Boards</div>
+          {selectedFolder && <div className="mt-1 text-xs text-muted-foreground">Folder: {selectedFolder.name}</div>}
         </div>
         <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
           {showSearch && (
-            <input
+            <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search boards..."
-              className="min-w-0 rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 w-[34vw] max-w-[10rem] sm:w-56"
+              className="h-9 min-w-0 rounded-full w-[34vw] max-w-[10rem] sm:w-56"
             />
           )}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon"
             onClick={() =>
               setShowSearch((prev) => {
                 const next = !prev;
@@ -347,7 +351,7 @@ export default function BoardsPage() {
                 return next;
               })
             }
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+            className="rounded-full"
             aria-label="Search"
             title="Search"
           >
@@ -355,349 +359,222 @@ export default function BoardsPage() {
               <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6" fill="none" />
               <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
-          </button>
-          <div className="relative w-auto" ref={tagMenuRef}>
-            <button
-              type="button"
-              onClick={() => setShowTagMenu((prev) => !prev)}
-              className="flex max-w-[8.5rem] items-center gap-2 truncate rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 sm:max-w-none sm:px-4"
-              aria-label="Filter by tags"
-              title="Filter by tags"
-            >
-              <span className="truncate">{tagLabel}</span>
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true">
-                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-              </svg>
-            </button>
-            {showTagMenu && (
-              <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => setTagFilters([])}
-                  className={`w-full px-4 py-2 text-left text-sm ${
-                    tagFilters.length === 0 ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
+                <span className="truncate">{tagLabel}</span>
+                <svg viewBox="0 0 24 24" className="ml-1 h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuCheckboxItem checked={tagFilters.length === 0} onCheckedChange={() => setTagFilters([])}>
+                All tags
+              </DropdownMenuCheckboxItem>
+              {availableTags.map((tag) => (
+                <DropdownMenuCheckboxItem
+                  key={tag}
+                  checked={tagFilters.includes(tag)}
+                  onCheckedChange={(checked) =>
+                    setTagFilters((prev) =>
+                      checked ? [...prev.filter((item) => item !== tag), tag] : prev.filter((item) => item !== tag)
+                    )
+                  }
                 >
-                  All tags
-                </button>
-                {availableTags.map((tag) => {
-                  const active = tagFilters.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() =>
-                        setTagFilters((prev) =>
-                          active ? prev.filter((item) => item !== tag) : [...prev, tag]
-                        )
-                      }
-                      className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
-                        active ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span>{tag}</span>
-                      {active && (
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                          <path d="M5 12l4 4 10-10" stroke="currentColor" strokeWidth="1.6" fill="none" />
-                        </svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                  {tag}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
       <div className="h-[calc(100vh-13.5rem)]">
         <section className="h-full overflow-visible pr-1">
           <div className="grid h-full grid-rows-3 content-start gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {pagedBoards.map((board) => {
-            const description = (board.description ?? '').trim();
-            return (
-            <div
-              key={board.id}
-              className={`relative flex h-full min-h-0 flex-col overflow-visible rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                openBoardMenuId === board.id ? 'z-40' : 'z-0'
-              }`}
-            >
-              <Link href={`/boards/${board.id}`} className="block flex-1">
-                <div className="truncate text-sm font-semibold text-slate-900">{board.name}</div>
-                {description && (
-                  <div
-                    className="mt-1 overflow-hidden text-xs leading-relaxed text-slate-600"
-                    style={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {description}
-                  </div>
-                )}
-              </Link>
-              <div className="mt-1.5 flex items-end justify-between gap-2">
-                <Link href={`/boards/${board.id}`} className="min-w-0 flex-1">
-                  <div className="text-xs text-slate-500">Cards: {board.card_count ?? 0}</div>
-                  {(board.tags?.length ?? 0) > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {board.tags?.slice(0, 2).map((tag) => (
-                        <span
-                          key={`${board.id}-${tag}`}
-                          className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {(board.tags?.length ?? 0) > 2 && (
-                        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                          +{(board.tags?.length ?? 0) - 2}
-                        </span>
+            {pagedBoards.map((board) => {
+              const description = (board.description ?? '').trim();
+              return (
+                <div
+                  key={board.id}
+                  className="relative flex h-full min-h-0 flex-col overflow-visible rounded-2xl border border-border bg-card p-3.5 text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent/30 hover:shadow-md"
+                >
+                  <Link href={`/boards/${board.id}`} className="block flex-1">
+                    <div className="truncate text-sm font-semibold text-card-foreground">{board.name}</div>
+                    {description && (
+                      <div
+                        className="mt-1 overflow-hidden text-xs leading-relaxed text-muted-foreground"
+                        style={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                        }}
+                      >
+                        {description}
+                      </div>
+                    )}
+                  </Link>
+                  <div className="mt-1.5 flex items-end justify-between gap-2">
+                    <Link href={`/boards/${board.id}`} className="min-w-0 flex-1">
+                      <div className="text-xs text-muted-foreground">Cards: {board.card_count ?? 0}</div>
+                      {(board.tags?.length ?? 0) > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {board.tags?.slice(0, 2).map((tag) => (
+                            <span
+                              key={`${board.id}-${tag}`}
+                              className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {(board.tags?.length ?? 0) > 2 && (
+                            <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              +{(board.tags?.length ?? 0) - 2}
+                            </span>
+                          )}
+                        </div>
                       )}
-                    </div>
-                  )}
-                </Link>
-                <div className="relative flex shrink-0 justify-end">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setOpenBoardMenuId((prev) => (prev === board.id ? null : board.id));
-                    }}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"
-                    aria-label="Board actions"
-                    title="Board actions"
-                  >
-                    ...
-                  </button>
-                  {openBoardMenuId === board.id && (
-                    <div
-                      className="absolute right-0 top-full z-50 mt-1 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
-                      onMouseDown={(event) => event.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          void handleArchiveToggle(board);
-                          setOpenBoardMenuId(null);
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        {board.folder_id === archiveFolder?.id ? 'Unarchive' : 'Archive'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setCopyingBoard(board);
-                          setCopyError('');
-                          setCopySuccessMessage('');
-                          setOpenBoardMenuId(null);
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        Copy to space
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          handleStartEdit(board);
-                          setOpenBoardMenuId(null);
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          setDeletingBoard(board);
-                          setOpenBoardMenuId(null);
-                        }}
-                        className="w-full px-3 py-2 text-left text-xs text-rose-600 hover:bg-rose-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
+                    </Link>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          aria-label="Board actions"
+                          title="Board actions"
+                        >
+                          ...
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuItem onClick={() => void handleArchiveToggle(board)}>
+                          {board.folder_id === archiveFolder?.id ? 'Unarchive' : 'Archive'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setCopyingBoard(board);
+                            setCopyError('');
+                            setCopySuccessMessage('');
+                          }}
+                        >
+                          Copy to space
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStartEdit(board)}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeletingBoard(board)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
-              </div>
-            </div>
-            );
-          })}
+              );
+            })}
           </div>
         </section>
       </div>
 
-      <div className="fixed bottom-1 md:bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-sm backdrop-blur">
+      <div className="fixed bottom-1 left-1/2 z-40 -translate-x-1/2 rounded-full border border-border bg-background/95 px-2 py-1 shadow-sm backdrop-blur md:bottom-3">
         <div className="flex items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage <= 1}
-            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage <= 1} className="rounded-full">
             Prev
-          </button>
-          <div className="text-xs text-slate-500">
+          </Button>
+          <div className="text-xs text-muted-foreground">
             {currentPage} / {totalPages}
           </div>
-          <button
-            type="button"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={currentPage >= totalPages}
-            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage >= totalPages} className="rounded-full">
             Next
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="fixed bottom-6 right-6 z-40">
-        {showCreate && (
-          <div className="absolute bottom-14 right-0 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">New board</div>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Board name"
-              className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-            />
-            {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
-            <div className="mt-3 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreate(false);
-                  setError('');
-                }}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreate}
-                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setShowCreate((prev) => !prev)}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg"
-          aria-label="Create board"
-          title="Create board"
-        >
+        <Button type="button" onClick={() => setShowCreate(true)} size="icon" className="h-12 w-12 rounded-full shadow-lg" aria-label="Create board" title="Create board">
           <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
-        </button>
+        </Button>
       </div>
 
-      {editingBoard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Rename board</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Update name</h3>
-            <input
-              value={editingName}
-              onChange={(event) => setEditingName(event.target.value)}
-              placeholder="Board name"
-              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-            />
-            <input
-              value={editingTags}
-              onChange={(event) => setEditingTags(event.target.value)}
-              placeholder="Tags (comma separated)"
-              className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-            />
-            <textarea
-              value={editingDescription}
-              onChange={(event) => setEditingDescription(event.target.value)}
-              placeholder="Description"
-              rows={4}
-              className="mt-3 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-            />
-            <select
-              value={editingFolderId === null ? '' : String(editingFolderId)}
-              onChange={(event) => {
-                const raw = event.target.value;
-                setEditingFolderId(raw ? Number(raw) : null);
-              }}
-              className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
-            >
-              <option value="">No folder</option>
-              {folders.map((folder) => (
-                <option key={folder.id} value={String(folder.id)}>
-                  {folder.name}
-                </option>
-              ))}
-            </select>
-            {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingBoard(null);
-                  setError('');
-                }}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleUpdate}
-                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
-              >
-                Save
-              </button>
-            </div>
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">New board</div>
+            <DialogTitle>Create board</DialogTitle>
+            <DialogDescription>Create a new board without changing its behavior.</DialogDescription>
+          </DialogHeader>
+          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Board name" />
+          {error && showCreate ? <div className="text-xs text-destructive">{error}</div> : null}
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => { setShowCreate(false); setError(''); }}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreate}>Create</Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {deletingBoard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete board</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
-            <p className="mt-3 text-sm text-slate-600">
-              This will remove the board and its layout. Cards remain in your card box.
-            </p>
-            {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setDeletingBoard(null)}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
-              >
-                Delete
-              </button>
-            </div>
+      <Dialog open={Boolean(editingBoard)} onOpenChange={(open) => (!open ? setEditingBoard(null) : undefined)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Rename board</div>
+            <DialogTitle>Update name</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input value={editingName} onChange={(event) => setEditingName(event.target.value)} placeholder="Board name" />
+            <Input value={editingTags} onChange={(event) => setEditingTags(event.target.value)} placeholder="Tags (comma separated)" />
+            <Textarea value={editingDescription} onChange={(event) => setEditingDescription(event.target.value)} placeholder="Description" rows={4} />
+            <Select
+              value={editingFolderId === null ? 'none' : String(editingFolderId)}
+              onValueChange={(value) => setEditingFolderId(value === 'none' ? null : Number(value))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="No folder" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No folder</SelectItem>
+                {folders.map((folder) => (
+                  <SelectItem key={folder.id} value={String(folder.id)}>
+                    {folder.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {error && editingBoard ? <div className="text-xs text-destructive">{error}</div> : null}
           </div>
-        </div>
-      )}
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => { setEditingBoard(null); setError(''); }}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleUpdate}>Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(deletingBoard)} onOpenChange={(open) => (!open ? setDeletingBoard(null) : undefined)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Delete board</div>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the board and its layout. Cards remain in your card box.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && deletingBoard ? <div className="text-xs text-destructive">{error}</div> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-700" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {copyingBoard && (
         <BoardCopyToSpaceModal

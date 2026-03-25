@@ -1,10 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardCreateOverlay from '../../../components/CardCreateOverlay';
 import CardPreview from '../../../components/CardPreview';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu';
+import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
+import { Badge } from '../../../components/ui/badge';
 import {
   Card,
   Board,
@@ -36,9 +41,7 @@ export default function CardsPage() {
   const [boardFilter, setBoardFilter] = useState<string>('');
   const [error, setError] = useState('');
   const [cardPreviewLength, setCardPreviewLength] = useState(120);
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const [page, setPage] = useState(1);
-  const filterRef = useRef<HTMLDivElement | null>(null);
+  const [pageState, setPageState] = useState<{ value: number; key: string }>({ value: 1, key: '' });
 
   useEffect(() => {
     const mediaMobile = window.matchMedia('(max-width: 768px)');
@@ -58,18 +61,6 @@ export default function CardsPage() {
       mediaXl.removeEventListener('change', handleChange);
     };
   }, []);
-
-  useEffect(() => {
-    if (!showFilterMenu) return;
-    const handleClick = (event: MouseEvent) => {
-      if (!filterRef.current) return;
-      if (!filterRef.current.contains(event.target as Node)) {
-        setShowFilterMenu(false);
-      }
-    };
-    window.addEventListener('mousedown', handleClick);
-    return () => window.removeEventListener('mousedown', handleClick);
-  }, [showFilterMenu]);
 
   useEffect(() => {
     const load = async () => {
@@ -124,14 +115,12 @@ export default function CardsPage() {
     });
   }, [cards, query]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [query, boardFilter, cards.length, isMobile, isXl]);
-
   const pageSize = isMobile ? 12 : isXl ? 9 : 6;
+  const pageResetKey = `${query}::${boardFilter}::${cards.length}::${isMobile ? 'm' : 'd'}::${isXl ? 'x' : 'n'}`;
 
   const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
+  const requestedPage = pageState.key === pageResetKey ? pageState.value : 1;
+  const currentPage = Math.min(requestedPage, totalPages);
   const pagedCards = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredCards.slice(start, start + pageSize);
@@ -207,21 +196,21 @@ export default function CardsPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Card Box</div>
-          <div className="mt-2 min-h-[20px] text-sm font-semibold text-slate-700">
-            {boardFilter ? `Card Box / ${boardTitle}` : ''}
-          </div>
+          <div className="mt-2 min-h-[20px] text-sm font-semibold text-slate-700">{boardFilter ? boardTitle : ''}</div>
         </div>
         <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
           {showSearch && (
-            <input
+            <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search cards..."
-              className="min-w-0 rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300 w-[34vw] max-w-[10rem] sm:w-56"
+              className="h-9 w-[34vw] min-w-0 max-w-[10rem] rounded-full sm:w-56"
             />
           )}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon"
             onClick={() =>
               setShowSearch((prev) => {
                 const next = !prev;
@@ -231,7 +220,7 @@ export default function CardsPage() {
                 return next;
               })
             }
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+            className="h-9 w-9 rounded-full"
             aria-label="Search"
             title="Search"
           >
@@ -239,107 +228,57 @@ export default function CardsPage() {
               <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6" fill="none" />
               <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
-          </button>
+          </Button>
           {!isMobile && (
-            <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => handleOpenModeChange('modal')}
-                className={`rounded-full p-2 ${
-                  cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Open in modal"
-                aria-label="Open in modal"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <rect
-                    x="5"
-                    y="6"
-                    width="14"
-                    height="12"
-                    rx="1.6"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    fill="none"
-                  />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleOpenModeChange('sidepanel')}
-                className={`rounded-full p-2 ${
-                  cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Open in side panel"
-                aria-label="Open in side panel"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <rect
-                    x="4"
-                    y="6"
-                    width="16"
-                    height="12"
-                    rx="1.6"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    fill="none"
-                  />
-                  <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
-                </svg>
-              </button>
-            </div>
+            <Tabs value={cardOpenMode} onValueChange={(value) => void handleOpenModeChange(value as 'modal' | 'sidepanel')}>
+              <TabsList className="rounded-full">
+                <TabsTrigger value="modal" className="rounded-full px-3" aria-label="Open in modal" title="Open in modal">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                  </svg>
+                </TabsTrigger>
+                <TabsTrigger value="sidepanel" className="rounded-full px-3" aria-label="Open in side panel" title="Open in side panel">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                    <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           )}
-          <div className="relative w-auto" ref={filterRef}>
-            <button
-              type="button"
-              onClick={() => setShowFilterMenu((prev) => !prev)}
-              className="flex max-w-[8.5rem] items-center gap-2 truncate rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 sm:max-w-none sm:px-4"
-              aria-label="Filter by board"
-              title="Filter by board"
-            >
-              <span className="truncate">{boardFilterLabel}</span>
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true">
-                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-              </svg>
-            </button>
-            {showFilterMenu && (
-              <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBoardFilter('');
-                    setShowFilterMenu(false);
-                  }}
-                  className={`w-full px-4 py-2 text-left text-sm ${
-                    boardFilter === '' ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
+                <span className="truncate">{boardFilterLabel}</span>
+                <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => setBoardFilter('')} className={boardFilter === '' ? 'bg-accent' : undefined}>
+                All boards
+              </DropdownMenuItem>
+              {boards.map((board) => (
+                <DropdownMenuItem
+                  key={board.id}
+                  onClick={() => setBoardFilter(String(board.id))}
+                  className={String(board.id) === boardFilter ? 'bg-accent' : undefined}
                 >
-                  All boards
-                </button>
-                {boards.map((board) => (
-                  <button
-                    key={board.id}
-                    type="button"
-                    onClick={() => {
-                      setBoardFilter(String(board.id));
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm ${
-                      String(board.id) === boardFilter
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {board.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                  {board.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
-      {error && <div className="text-xs text-rose-600">{error}</div>}
+      <div className="flex items-center justify-between">
+        {error ? <div className="text-xs text-rose-600">{error}</div> : <div />}
+        <Badge variant="outline" className="text-[11px] text-slate-500">
+          {filteredCards.length} cards
+        </Badge>
+      </div>
 
       <div className="flex h-[calc(100vh-15rem)] flex-col">
         <section className={`${isMobile ? 'flex-1 overflow-y-auto' : 'h-full overflow-hidden'} pr-1`}>
@@ -368,27 +307,41 @@ export default function CardsPage() {
         </section>
       </div>
 
-      <div className="fixed bottom-1 md:bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-sm backdrop-blur">
+      <div className="fixed bottom-1 left-1/2 z-40 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-sm backdrop-blur md:bottom-3">
         <div className="flex items-center justify-center gap-3">
-          <button
+          <Button
             type="button"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setPageState((prev) => ({
+                value: Math.max(1, (prev.key === pageResetKey ? prev.value : 1) - 1),
+                key: pageResetKey,
+              }))
+            }
             disabled={currentPage <= 1}
-            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full"
           >
             Prev
-          </button>
+          </Button>
           <div className="text-xs text-slate-500">
             {currentPage} / {totalPages}
           </div>
-          <button
+          <Button
             type="button"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setPageState((prev) => ({
+                value: Math.min(totalPages, (prev.key === pageResetKey ? prev.value : 1) + 1),
+                key: pageResetKey,
+              }))
+            }
             disabled={currentPage >= totalPages}
-            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full"
           >
             Next
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -416,7 +369,7 @@ export default function CardsPage() {
         />
       )}
 
-      <button
+      <Button
         type="button"
         onClick={() => {
           if (isMobile) {
@@ -425,11 +378,12 @@ export default function CardsPage() {
           }
           setShowCreate(true);
         }}
-        className="fixed bottom-6 right-6 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-2xl font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
+        size="icon"
+        className="fixed bottom-6 right-6 h-12 w-12 rounded-full text-2xl font-semibold shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
         aria-label="Create card"
       >
         +
-      </button>
+      </Button>
     </div>
   );
 }

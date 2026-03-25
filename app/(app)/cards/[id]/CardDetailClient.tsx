@@ -149,29 +149,29 @@ export default function CardDetailPage() {
   };
 
   if (error) {
-    return <div className="text-sm text-rose-600">{error}</div>;
+    return <div className="text-sm text-destructive">{error}</div>;
   }
 
   if (!card) {
-    return <div className="text-sm text-slate-500">Card not found.</div>;
+    return <div className="text-sm text-muted-foreground">Card not found.</div>;
   }
 
   return (
     <div className={pageContainerClassName}>
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <nav className="flex items-center gap-2 text-xs font-medium text-slate-500">
-          <Link href="/cards" className="hover:text-slate-700">
+        <nav className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <Link href="/cards" className="transition hover:text-card-foreground">
             Card Box
           </Link>
           <span>/</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className="w-40 border-0 bg-transparent p-0 text-xs font-semibold text-slate-700 focus:outline-none"
+            className="w-40 border-0 bg-transparent p-0 text-xs font-semibold text-card-foreground focus:outline-none"
             placeholder="Untitled"
           />
         </nav>
-        <div className="flex items-center gap-2 text-xs text-slate-600">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <CardViewModeSwitch isMobile={isMobile} viewMode={activeViewMode} onChange={setViewMode} />
           <CardActionsMenu
             open={showCardMenu}
@@ -200,7 +200,7 @@ export default function CardDetailPage() {
             onMentionSelect={mentions.handleMentionSelect}
             isSaving={isSaving}
           />
-          <div className="h-full w-px bg-slate-200" />
+          <div className="h-full w-px bg-border" />
           <CardPreviewPane
             content={content}
             linkedCards={linkedCards}

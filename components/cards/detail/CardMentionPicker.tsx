@@ -31,11 +31,11 @@ export default function CardMentionPicker({
 
   return (
     <div
-      className="fixed z-50 w-72 max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg"
+      className="fixed z-50 w-72 max-w-sm rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg"
       style={{ top: position.top, left: position.left }}
       ref={menuRef}
     >
-      <div className="border-b border-slate-200 px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">
+      <div className="border-b border-border px-4 py-2 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
         Link card
       </div>
       <div className="max-h-52 overflow-y-auto p-2">
@@ -44,14 +44,14 @@ export default function CardMentionPicker({
             key={item.id}
             type="button"
             onClick={() => onSelect(item)}
-            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-popover-foreground transition hover:bg-accent hover:text-accent-foreground"
           >
             <span className="truncate">{item.title}</span>
-            <span className="text-xs text-slate-400">#{item.id}</span>
+            <span className="text-xs text-muted-foreground">#{item.id}</span>
           </button>
         ))}
         {cards.filter((item) => item.id !== currentCardId).length === 0 && (
-          <div className="px-3 py-2 text-xs text-slate-400">No cards available.</div>
+          <div className="px-3 py-2 text-xs text-muted-foreground">No cards available.</div>
         )}
       </div>
     </div>

@@ -1,6 +1,16 @@
 'use client';
 
 import { Space } from '../../lib/noteToolApi';
+import { Button } from '../ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+import { ScrollArea } from '../ui/scroll-area';
 
 type CardCopyToSpaceModalProps = {
   open: boolean;
@@ -30,45 +40,45 @@ export default function CardCopyToSpaceModal({
   const targetSpaces = spaces.filter((space) => space.id !== currentSpaceId);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Copy to space</div>
-        <h3 className="mt-2 text-lg font-semibold text-slate-900">{cardTitle}</h3>
-        <p className="mt-2 text-sm text-slate-600">Create a duplicate of this card in another space.</p>
-        {error && <div className="mt-3 text-xs text-rose-600">{error}</div>}
-        {successMessage && <div className="mt-3 text-xs text-emerald-600">{successMessage}</div>}
-        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+    <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{cardTitle}</DialogTitle>
+          <DialogDescription>Create a duplicate of this card in another space.</DialogDescription>
+        </DialogHeader>
+        {error && <div className="text-xs text-rose-600">{error}</div>}
+        {successMessage && <div className="text-xs text-emerald-600">{successMessage}</div>}
+        <ScrollArea className="max-h-64">
+          <div className="space-y-2 pr-4">
           {targetSpaces.map((space) => (
-            <button
+            <Button
               key={space.id}
               type="button"
               onClick={() => void onCopy(space.id)}
               disabled={busySpaceId === space.id}
-              className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              variant="outline"
+              className="flex h-auto w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
               <span className="truncate">
                 {space.name}
                 {space.is_default ? ' (Default)' : ''}
               </span>
               <span className="text-xs text-slate-400">{busySpaceId === space.id ? 'Copying...' : `#${space.id}`}</span>
-            </button>
+            </Button>
           ))}
           {targetSpaces.length === 0 && (
             <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
               No other spaces available.
             </div>
           )}
-        </div>
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-          >
+          </div>
+        </ScrollArea>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef } from 'react';
-import { useClickOutside } from '../../hooks/useClickOutside';
+import { Button } from '../ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 
 type CardAction = {
   id: string;
@@ -27,44 +27,39 @@ export default function CardActionsMenu({
   align = 'right',
   showTrigger = true,
 }: CardActionsMenuProps) {
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  useClickOutside(menuRef, open, onClose);
+  const contentAlign = align === 'left' ? 'start' : 'end';
 
   return (
-    <div className="relative" ref={menuRef}>
+    <DropdownMenu open={open} onOpenChange={(next) => (next ? onToggle() : onClose())}>
       {showTrigger && (
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
-          aria-label="Card actions"
-          title="Card actions"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-            <circle cx="6.5" cy="12" r="1.5" fill="currentColor" />
-            <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-            <circle cx="17.5" cy="12" r="1.5" fill="currentColor" />
-          </svg>
-        </button>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50"
+            aria-label="Card actions"
+            title="Card actions"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+              <circle cx="6.5" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="17.5" cy="12" r="1.5" fill="currentColor" />
+            </svg>
+          </Button>
+        </DropdownMenuTrigger>
       )}
-      {open && (
-        <div
-          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} z-40 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg`}
-        >
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              onClick={action.onClick}
-              className={`block w-full px-3 py-2 text-left text-sm ${
-                action.tone === 'danger' ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      <DropdownMenuContent align={contentAlign} className="w-44">
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.id}
+            onClick={action.onClick}
+            className={action.tone === 'danger' ? 'text-rose-600 focus:text-rose-600' : undefined}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

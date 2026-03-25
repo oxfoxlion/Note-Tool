@@ -3,6 +3,10 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { unlockSharedBoard } from '../../../../lib/noteToolApi';
+import { Button } from '../../../../components/ui/button';
+import { Card, CardContent } from '../../../../components/ui/card';
+import { Input } from '../../../../components/ui/input';
+import ThemeToggle from '../../../../components/theme/ThemeToggle';
 
 type UnlockBoardClientProps = {
   token: string;
@@ -34,28 +38,26 @@ export default function UnlockBoardClient({ token }: UnlockBoardClientProps) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Protected Link</div>
-        <h1 className="mt-2 text-xl font-semibold text-slate-900">Enter password</h1>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <ThemeToggle className="fixed right-4 top-4 rounded-full" />
+      <Card className="w-full max-w-sm rounded-2xl border-border bg-card shadow-sm">
+        <CardContent className="p-6">
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Protected Link</div>
+        <h1 className="mt-2 text-xl font-semibold text-card-foreground">Enter password</h1>
         <form className="mt-5 space-y-3" onSubmit={handleSubmit}>
-          <input
+          <Input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Password"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
           />
-          {error && <div className="text-xs text-rose-600">{error}</div>}
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
+          {error && <div className="text-xs text-destructive">{error}</div>}
+          <Button type="submit" disabled={busy} className="w-full">
             {busy ? 'Checking...' : 'Unlock'}
-          </button>
+          </Button>
         </form>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

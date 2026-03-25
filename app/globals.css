@@ -3,8 +3,26 @@
 @import "@uiw/react-markdown-preview/markdown.css";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fcfcfd;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #111827;
+  --primary-foreground: #f8fafc;
+  --secondary: #eef2ff;
+  --secondary-foreground: #1e293b;
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #94a3b8;
+  --radius: 0.75rem;
 }
 
 .theme-light {
@@ -12,49 +30,103 @@
   --app-foreground: #0f172a;
   --panel-bg: #ffffff;
   --panel-border: #e2e8f0;
-  --sidebar-bg: #0f172a;
+  --sidebar-bg: #e5e7eb;
+  --sidebar-fg: #111827;
+  --sidebar-muted: #6b7280;
+  --sidebar-border: #d1d5db;
+  --sidebar-hover: #dbe0e7;
+  --sidebar-active: #d1d5db;
+  --board-grid-dot: rgba(148, 163, 184, 0.22);
+  --background: #fcfcfd;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #111827;
+  --primary-foreground: #f8fafc;
+  --secondary: #eef2ff;
+  --secondary-foreground: #1e293b;
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #94a3b8;
+}
+
+.theme-dark {
+  --app-bg: #020617;
+  --app-foreground: #e2e8f0;
+  --panel-bg: #0f172a;
+  --panel-border: #1e293b;
+  --sidebar-bg: #111111;
   --sidebar-fg: #e2e8f0;
   --sidebar-muted: #94a3b8;
-  --background: #ffffff;
-  --foreground: #0f172a;
-}
-
-.board-toolbar {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border-color: #e2e8f0 !important;
-}
-
-.board-toolbar .tool-btn {
-  color: #334155;
-}
-
-.board-toolbar .tool-btn:hover {
-  background: rgba(226, 232, 240, 0.6) !important;
-}
-
-.board-toolbar .tool-zoom {
-  background: rgba(255, 255, 255, 0.85) !important;
-  border-color: #e2e8f0 !important;
+  --sidebar-border: #2a2a2a;
+  --sidebar-hover: #1b1b1b;
+  --sidebar-active: #222222;
+  --board-grid-dot: rgba(148, 163, 184, 0.12);
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --card: #0f172a;
+  --card-foreground: #e2e8f0;
+  --popover: #0f172a;
+  --popover-foreground: #e2e8f0;
+  --primary: #f8fafc;
+  --primary-foreground: #020617;
+  --secondary: #111827;
+  --secondary-foreground: #e2e8f0;
+  --muted: #111827;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #e2e8f0;
+  --destructive: #7f1d1d;
+  --destructive-foreground: #fecaca;
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #64748b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
 }
 
 .has-sidepanel .app-main {
@@ -149,7 +221,7 @@ body {
 }
 
 .prose a {
-  color: #3b82f6;
+  color: var(--foreground);
   text-decoration: none;
 }
 
@@ -161,8 +233,8 @@ body {
   position: relative;
   margin: 0.8rem 0;
   padding-left: 1rem;
-  color: #475569;
-  border-left: 3px solid #e2e8f0;
+  color: var(--muted-foreground);
+  border-left: 3px solid var(--border);
 }
 
 .prose blockquote::before {
@@ -170,7 +242,7 @@ body {
   position: absolute;
   left: 0;
   top: -0.2rem;
-  color: #cbd5f5;
+  color: var(--muted-foreground);
   font-size: 1.4rem;
   line-height: 1;
 }
@@ -179,7 +251,8 @@ body {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
   font-size: 0.85em;
-  background: #f1f5f9;
+  background: var(--muted);
+  color: var(--card-foreground);
   padding: 0.1rem 0.3rem;
   border-radius: 0.35rem;
 }
@@ -212,6 +285,42 @@ body {
   color: inherit !important;
 }
 
+.card-editor-surface .w-md-editor,
+.card-editor-surface .w-md-editor-toolbar,
+.card-editor-surface .w-md-editor-content,
+.card-editor-surface .w-md-editor-text,
+.card-editor-surface .w-md-editor-text-pre,
+.card-editor-surface .w-md-editor-text-input,
+.card-editor-surface .w-md-editor-text-container,
+.card-editor-surface .w-md-editor-preview {
+  background: var(--muted) !important;
+  color: var(--card-foreground) !important;
+}
+
+.card-editor-surface .w-md-editor {
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+.card-editor-surface .w-md-editor-toolbar {
+  border-bottom-color: var(--border) !important;
+}
+
+.card-editor-surface .w-md-editor-toolbar li > button,
+.card-editor-surface .w-md-editor-toolbar li > button svg {
+  color: var(--card-foreground) !important;
+}
+
+.card-editor-surface .w-md-editor-text-input,
+.card-editor-surface .w-md-editor-text-pre,
+.card-editor-surface .w-md-editor-text {
+  caret-color: var(--card-foreground) !important;
+}
+
+.card-editor-surface .w-md-editor-text-input::placeholder {
+  color: var(--muted-foreground) !important;
+}
+
 /* Normalize task-list checkbox layout for @uiw markdown preview */
 .prose .wmde-markdown .contains-task-list {
   padding-left: 0;
@@ -234,13 +343,42 @@ body {
 
 .prose th,
 .prose td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   padding: 0.4rem 0.6rem;
   text-align: left;
   vertical-align: top;
 }
 
 .prose thead th {
-  background: #f8fafc;
+  background: var(--muted);
   font-weight: 600;
+}
+
+.card-preview-surface,
+.card-preview-surface .wmde-markdown,
+.card-preview-surface .wmde-markdown > div {
+  background: transparent !important;
+  color: var(--card-foreground) !important;
+}
+
+.card-preview-surface .wmde-markdown *,
+.card-preview-surface .wmde-markdown section,
+.card-preview-surface .wmde-markdown article,
+.card-preview-surface .wmde-markdown div,
+.card-preview-surface .wmde-markdown p,
+.card-preview-surface .wmde-markdown span,
+.card-preview-surface .wmde-markdown li,
+.card-preview-surface .wmde-markdown td,
+.card-preview-surface .wmde-markdown th {
+  color: inherit;
+}
+
+.card-preview-surface .wmde-markdown table,
+.card-preview-surface .wmde-markdown thead,
+.card-preview-surface .wmde-markdown tbody,
+.card-preview-surface .wmde-markdown tr,
+.card-preview-surface .wmde-markdown td,
+.card-preview-surface .wmde-markdown th {
+  background: transparent !important;
+  border-color: var(--border) !important;
 }

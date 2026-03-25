@@ -2,3 +2,23 @@
 
 - [ ] Board regions: 定義並實作「自動命名規則」（例如 `Region 1`, `Region 2`），避免多人同時操作時名稱重複；以前端暫時名稱為 fallback，最終名稱由後端規則決定並回傳。
 - [ ] Markdown 預覽 checkbox 映射偏移：在 `split/preview` 模式，點擊上方 task 可能切換到下方 task。需修正為「點哪個就只切哪個」，並覆蓋 `CardDetailClient`、`CardOverlay`、`CardCreateOverlay` 三個入口；至少驗證 `- [ ]` 與 `1. [ ]` 兩種列表。
+- [ ] Space: 在 Space `...` menu 補上 `Rename space`。
+- [ ] Space: 將 Space 排序持久化改為後端保存，不再只依賴 localStorage。
+- [ ] Space: 補 E2E / integration 測試，至少覆蓋 `Space switch`、`Create folder in current space`、`Copy card to space`、`Copy board to space`、`Delete non-default space`。
+- [x] Theme: 依 [`docs/theme-black-white-spec.md`](/home/shao/note_tool/docs/theme-black-white-spec.md) 補齊正式 `.theme-dark` token，包含 app shell token 與 shadcn token 對應。
+- [x] Theme: 建立黑白模式切換機制，至少包含 root class 或 `data-theme`、localStorage 儲存、初始 fallback 邏輯。
+- [x] Theme: 盤點並移除重構期間新增或遺留的硬編碼顏色，避免 `bg-white` / `text-slate-900` / `border-slate-200` 持續擴散。
+- [ ] Cards: 手動驗證 `CardOverlay` / `CardCreateOverlay` 在 `modal` 與 `sidepanel` 兩種模式下的關閉、Esc、背景點擊、autosave、mentions、share/remove/copy/delete 流程。
+- [ ] Cards: 決定是否要進一步將 mentions picker、linked cards list、editor toolbar 抽成更小的 shadcn 風格共用元件，減少 `CardOverlay` / `CardCreateOverlay` 重複結構。
+- [x] Boards: 重構 [`app/(app)/boards/page.tsx`](/home/shao/note_tool/app/(app)/boards/page.tsx) 的 create / edit / archive / copy / filter UI，統一改用 shadcn primitives。
+- [x] Boards: 重構 [`components/boards/BoardCopyToSpaceModal.tsx`](/home/shao/note_tool/components/boards/BoardCopyToSpaceModal.tsx) 與 board action menu，移除舊式自製 modal / menu 外殼。
+- [x] Boards: 將 board list 頁面的 tag filter、search、pagination、board action dropdown 併入主題 token 與 shadcn 元件系統。
+- [x] Board Detail: 重構 [`app/(app)/boards/[id]/page.tsx`](/home/shao/note_tool/app/(app)/boards/[id]/page.tsx) 周邊 UI，優先處理 toolbar、board menu、rename/share/delete dialog、import panel、region dialog。
+- [ ] Board Detail: 保持拖曳、縮放、region drawing、share link、card positioning 邏輯不變，只替換外層容器與控制元件。
+- [ ] Board Detail: 補驗證 mobile 觸控、desktop pointer、sidepanel 共存、share/revoke、copy-to-space 等高風險流程。
+- [x] Card Detail: 盤點 [`components/cards/detail`](/home/shao/note_tool/components/cards/detail) 是否仍有未統一的視覺與 primitive，視需要收斂成同一套 shadcn 風格。
+- [x] Shared Pages: 重構 `shared-card` / `shared-board` / unlock 流程頁面，使其跟 cards / boards 主題一致。
+- [x] Auth: 重構 [`app/auth/login/page.tsx`](/home/shao/note_tool/app/auth/login/page.tsx)、[`app/auth/register/page.tsx`](/home/shao/note_tool/app/auth/register/page.tsx)、[`app/auth/verify/page.tsx`](/home/shao/note_tool/app/auth/verify/page.tsx)、[`app/auth/2fa-setup/page.tsx`](/home/shao/note_tool/app/auth/2fa-setup/page.tsx) 為正式 shadcn + token 風格。
+- [x] Dashboard: 重構 [`app/(app)/dashboard/page.tsx`](/home/shao/note_tool/app/(app)/dashboard/page.tsx) 與空狀態 / 錯誤狀態 / loading state，使整體視覺一致。
+- [ ] Global CSS: 清理 `app/globals.css` 中只服務舊元件的樣式，保留 markdown / board 特例，逐步改成 token 驅動。
+- [ ] Verification: 所有主要重構階段完成後，完整執行 `npm run lint`、`npm run build`，並補一份手動驗證清單結果。

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { disableTwoFactorAuth, getUserProfile, type UserProfile } from '../../../lib/noteToolApi';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent } from '../../../components/ui/card';
 
 function getErrorMessage(err: unknown, fallback: string) {
   if (typeof err === 'object' && err !== null && 'response' in err) {
@@ -73,69 +75,64 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return <div className="text-sm text-slate-500">Loading settings...</div>;
+    return <div className="text-sm text-muted-foreground">Loading settings...</div>;
   }
 
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Settings</div>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Account & Security</h1>
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Settings</div>
+        <h1 className="mt-2 text-2xl font-semibold text-card-foreground">Account & Security</h1>
       </div>
 
-      {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && <div className="mb-4 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
       {message && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>
+        <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600">{message}</div>
       )}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-sm text-slate-500">Nickname</div>
-        <div className="mt-1 text-base font-medium text-slate-900">{profile?.displayName || 'N/A'}</div>
-        <div className="mt-4 text-sm text-slate-500">Email</div>
-        <div className="mt-1 text-base text-slate-900">{profile?.email || 'N/A'}</div>
-      </section>
+      <Card className="rounded-2xl border-border bg-card shadow-sm">
+        <CardContent className="p-6">
+          <div className="text-sm text-muted-foreground">Nickname</div>
+          <div className="mt-1 text-base font-medium text-card-foreground">{profile?.displayName || 'N/A'}</div>
+          <div className="mt-4 text-sm text-muted-foreground">Email</div>
+          <div className="mt-1 text-base text-card-foreground">{profile?.email || 'N/A'}</div>
+        </CardContent>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <Card className="mt-6 rounded-2xl border-border bg-card shadow-sm">
+        <CardContent className="p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Two-Factor Authentication</h2>
-            <p className="mt-2 text-sm text-slate-600">
+            <h2 className="text-lg font-semibold text-card-foreground">Two-Factor Authentication</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
               Status:{' '}
-              <span className={profile?.twoFactorEnabled ? 'font-semibold text-emerald-700' : 'font-semibold text-slate-700'}>
+              <span className={profile?.twoFactorEnabled ? 'font-semibold text-emerald-600' : 'font-semibold text-card-foreground'}>
                 {profile?.twoFactorEnabled ? 'Enabled' : 'Disabled'}
               </span>
             </p>
           </div>
 
           {profile?.twoFactorEnabled ? (
-            <button
-              type="button"
-              onClick={handleDisable2FA}
-              disabled={busy}
-              className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
-            >
+            <Button type="button" variant="outline" onClick={handleDisable2FA} disabled={busy} className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700">
               {busy ? 'Disabling...' : 'Disable 2FA'}
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              onClick={handleEnable2FA}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
+            <Button type="button" onClick={handleEnable2FA}>
               Enable 2FA
-            </button>
+            </Button>
           )}
         </div>
 
         {!profile?.twoFactorEnabled && (
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-muted-foreground">
             Enabling 2FA will open setup flow where you scan a QR code and verify once to activate.
           </p>
         )}
-      </section>
+        </CardContent>
+      </Card>
 
       <div className="mt-6">
-        <Link href="/boards" className="text-sm font-medium text-slate-700 underline hover:text-slate-900">
+        <Link href="/boards" className="text-sm font-medium text-foreground underline hover:text-muted-foreground">
           Back to boards
         </Link>
       </div>

@@ -35,6 +35,27 @@ import {
 } from '../../../../lib/noteToolApi';
 import { useCurrentSpace } from '../../../../hooks/useCurrentSpace';
 import BoardCopyToSpaceModal from '../../../../components/boards/BoardCopyToSpaceModal';
+import { Button } from '../../../../components/ui/button';
+import { Input } from '../../../../components/ui/input';
+import { Textarea } from '../../../../components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../../components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../../../components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../../../components/ui/dropdown-menu';
+import { Tabs, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
 
 type BoardRegionView = {
   id: number;
@@ -1327,19 +1348,19 @@ export default function BoardDetailPage() {
             <div className="flex items-center justify-end gap-1">
               {showSearch && (
                 <div className="relative">
-                  <input
+                  <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search in board..."
-                    className="w-full min-w-[12rem] rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-slate-300 sm:w-56"
+                    className="h-9 w-full min-w-[12rem] rounded-full bg-background/90 text-xs shadow-sm backdrop-blur sm:w-56"
                   />
                   {query.trim() && (
-                    <div className="pointer-events-auto absolute left-0 top-12 z-40 w-[90vw] max-w-[22rem] overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-lg backdrop-blur sm:w-80">
-                      <div className="border-b border-slate-200 px-4 py-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    <div className="pointer-events-auto absolute left-0 top-12 z-40 w-[90vw] max-w-[22rem] overflow-hidden rounded-2xl border border-border bg-popover/95 shadow-lg backdrop-blur sm:w-80">
+                      <div className="border-b border-border px-4 py-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                           Search Results
                         </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                        <div className="mt-1 text-sm font-semibold text-popover-foreground">
                           {searchResults.length} cards
                         </div>
                       </div>
@@ -1350,17 +1371,17 @@ export default function BoardDetailPage() {
                               key={card.id}
                               type="button"
                               onClick={() => focusCard(card.id)}
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-left text-sm text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                              className="w-full rounded-xl border border-border bg-card px-3 py-3 text-left text-sm text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground hover:shadow-md"
                             >
-                              <div className="text-sm font-semibold text-slate-900">{card.title}</div>
-                              <div className="mt-2 text-xs text-slate-600">
+                              <div className="text-sm font-semibold">{card.title}</div>
+                              <div className="mt-2 text-xs text-muted-foreground">
                                 {(card.content ?? '').slice(0, 80) || 'No content yet.'}
                               </div>
                             </button>
                           ))}
                         </div>
                         {searchResults.length === 0 && (
-                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs text-slate-500">
+                          <div className="rounded-xl border border-dashed border-border px-3 py-4 text-xs text-muted-foreground">
                             No cards found.
                           </div>
                         )}
@@ -1370,8 +1391,10 @@ export default function BoardDetailPage() {
                 </div>
               )}
               <div className="relative">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon"
                   onClick={() =>
                     setShowSearch((prev) => {
                       const next = !prev;
@@ -1381,7 +1404,7 @@ export default function BoardDetailPage() {
                       return next;
                     })
                   }
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+                  className="rounded-full bg-background shadow-sm"
                   aria-label="Search"
                   title="Search"
                 >
@@ -1389,123 +1412,72 @@ export default function BoardDetailPage() {
                     <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.6" fill="none" />
                     <path d="M16.2 16.2l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                   </svg>
-                </button>
+                </Button>
               </div>
               {!isMobile && (
-                <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenModeChange('modal')}
-                    className={`rounded-full p-2 ${
-                      cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                    title="Open in modal"
-                    aria-label="Open in modal"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                      <rect
-                        x="5"
-                        y="6"
-                        width="14"
-                        height="12"
-                        rx="1.6"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        fill="none"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenModeChange('sidepanel')}
-                    className={`rounded-full p-2 ${
-                      cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                    title="Open in side panel"
-                    aria-label="Open in side panel"
-                  >
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                      <rect
-                        x="4"
-                        y="6"
-                        width="16"
-                        height="12"
-                        rx="1.6"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        fill="none"
-                      />
-                      <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
-                    </svg>
-                  </button>
-                </div>
+                <Tabs value={cardOpenMode} onValueChange={(value) => handleOpenModeChange(value as 'modal' | 'sidepanel')}>
+                  <TabsList className="rounded-full bg-card shadow-sm">
+                    <TabsTrigger value="modal" className="rounded-full px-3" title="Open in modal" aria-label="Open in modal">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                        <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                      </svg>
+                    </TabsTrigger>
+                    <TabsTrigger value="sidepanel" className="rounded-full px-3" title="Open in side panel" aria-label="Open in side panel">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                        <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                        <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
+                      </svg>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
               )}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowBoardMenu((prev) => !prev)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
-                  aria-label="Board menu"
-                  title="Board menu"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                    <circle cx="6" cy="12" r="1.5" fill="currentColor" />
-                    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-                    <circle cx="18" cy="12" r="1.5" fill="currentColor" />
-                  </svg>
-                </button>
-                {showBoardMenu && (
-                  <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                    <button
-                      type="button"
-                      onClick={handleOpenShare}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      Share board
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleOpenCopyToSpace}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      Copy to space
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRename(true);
-                        setShowBoardMenu(false);
-                      }}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      Edit details
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowDeleteConfirm(true);
-                        setShowBoardMenu(false);
-                      }}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+              <DropdownMenu open={showBoardMenu} onOpenChange={setShowBoardMenu}>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="icon" className="rounded-full bg-background shadow-sm" aria-label="Board menu" title="Board menu">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+                      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                      <circle cx="18" cy="12" r="1.5" fill="currentColor" />
+                    </svg>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={handleOpenShare}>Share board</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleOpenCopyToSpace}>Copy to space</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setShowRename(true);
+                      setShowBoardMenu(false);
+                    }}
+                  >
+                    Edit details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => {
+                      setShowDeleteConfirm(true);
+                      setShowBoardMenu(false);
+                    }}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            {error && <div className="text-xs text-rose-600">{error}</div>}
+            {error && <div className="text-xs text-destructive">{error}</div>}
           </div>
         </div>
 
         <div className="absolute bottom-6 right-6 z-30 flex flex-col items-end gap-3">
           {showToolbar && (
-            <div className="board-toolbar pointer-events-auto flex flex-col items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-2 shadow-sm backdrop-blur">
-              <button
+            <div className="board-toolbar pointer-events-auto flex flex-col items-center gap-2 rounded-full border border-border bg-background/90 p-2 shadow-sm backdrop-blur">
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={cycleTool}
-                className="tool-btn flex h-10 w-10 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                className="tool-btn h-10 w-10 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 title="Quick switch tool"
                 aria-label="Quick switch tool"
               >
@@ -1519,17 +1491,15 @@ export default function BoardDetailPage() {
                     strokeLinejoin="round"
                   />
                 </svg>
-              </button>
-              <div className="h-px w-6 bg-slate-200" />
-              <button
+              </Button>
+              <div className="h-px w-6 bg-border" />
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setTool('pan')}
-                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
-                  tool === 'pan'
-                    ? 'border border-slate-200 bg-slate-100 text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-100'
-                } ${tool === 'pan' ? 'tool-active' : ''}`}
+                className={`tool-btn h-10 w-10 rounded-full ${tool === 'pan' ? 'border border-border bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'} ${tool === 'pan' ? 'tool-active' : ''}`}
                 title="View (V)"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -1541,16 +1511,14 @@ export default function BoardDetailPage() {
                   />
                   <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
                 </svg>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setTool('add')}
-                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
-                  tool === 'add'
-                    ? 'border border-slate-200 bg-slate-100 text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-100'
-                } ${tool === 'add' ? 'tool-active' : ''}`}
+                className={`tool-btn h-10 w-10 rounded-full ${tool === 'add' ? 'border border-border bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'} ${tool === 'add' ? 'tool-active' : ''}`}
                 title="Edit (E)"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -1562,71 +1530,74 @@ export default function BoardDetailPage() {
                   />
                   <path d="M13.5 5l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
                 </svg>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={() => setTool('region')}
-                className={`tool-btn flex h-10 w-10 items-center justify-center rounded-full ${
-                  tool === 'region'
-                    ? 'border border-slate-200 bg-slate-100 text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-100'
-                } ${tool === 'region' ? 'tool-active' : ''}`}
+                className={`tool-btn h-10 w-10 rounded-full ${tool === 'region' ? 'border border-border bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'} ${tool === 'region' ? 'tool-active' : ''}`}
                 title="Region (R)"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                   <rect x="5" y="5" width="14" height="14" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
                 </svg>
-              </button>
-              <div className="h-px w-6 bg-slate-200" />
-              <div className="tool-zoom flex flex-col items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+              </Button>
+              <div className="h-px w-6 bg-border" />
+              <div className="tool-zoom flex flex-col items-center gap-2 rounded-full border border-border/70 bg-background/80 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   Zoom
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() =>
                     setViewport((prev) => ({
                       ...prev,
                       scale: Math.min(2.2, prev.scale + 0.1),
                     }))
                   }
-                  className="tool-btn flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+                  className="tool-btn h-9 w-9 rounded-full text-card-foreground hover:bg-accent hover:text-accent-foreground"
                   title="Zoom in"
                 >
                   +
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() =>
                     setViewport((prev) => ({
                       ...prev,
                       scale: Math.max(0.25, prev.scale - 0.1),
                     }))
                   }
-                  className="tool-btn flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+                  className="tool-btn h-9 w-9 rounded-full text-card-foreground hover:bg-accent hover:text-accent-foreground"
                   title="Zoom out"
                 >
                   −
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setViewport({ x: 0, y: 0, scale: 1 })}
-                  className="tool-btn flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+                  className="tool-btn h-9 w-9 rounded-full text-card-foreground hover:bg-accent hover:text-accent-foreground"
                   title="Reset"
                 >
                   1:1
-                </button>
-                <div className="text-[10px] text-slate-500">{Math.round(viewport.scale * 100)}%</div>
+                </Button>
+                <div className="text-[10px] text-muted-foreground">{Math.round(viewport.scale * 100)}%</div>
               </div>
             </div>
           )}
-          <button
+          <Button
             type="button"
+            size="icon"
             onClick={() => setShowToolbar((prev) => !prev)}
-            className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition ${
-              showToolbar ? 'bg-white text-slate-700 border border-slate-200' : 'bg-slate-900 text-white'
-            }`}
+            className={`h-12 w-12 rounded-full shadow-lg transition ${showToolbar ? 'border border-border bg-background text-foreground' : ''}`}
             aria-label="Toggle tools"
             title="Toggle tools"
           >
@@ -1639,7 +1610,7 @@ export default function BoardDetailPage() {
                 <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               </svg>
             )}
-          </button>
+          </Button>
         </div>
 
         <div
@@ -1688,7 +1659,7 @@ export default function BoardDetailPage() {
             const point = { x: Math.round(worldX), y: Math.round(worldY) };
             openCreateChooserAtPoint(point);
           }}
-          className={`absolute inset-0 touch-none overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] dark-grid ${
+          className={`absolute inset-0 touch-none overflow-hidden bg-[radial-gradient(circle_at_1px_1px,var(--board-grid-dot)_1px,transparent_0)] [background-size:28px_28px] ${
             tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair'
           }`}
         >
@@ -1719,7 +1690,7 @@ export default function BoardDetailPage() {
                 }}
               >
                 <div
-                  className="pointer-events-auto absolute left-0 top-0 -translate-y-full rounded-md border bg-white/95 px-2 py-1 text-xs font-semibold leading-4 shadow-sm"
+                  className="pointer-events-auto absolute left-0 top-0 -translate-y-full rounded-md border bg-background/95 px-2 py-1 text-xs font-semibold leading-4 shadow-sm backdrop-blur"
                   style={{
                     borderColor: hexToRgba(region.color, 0.35),
                     color: hexToRgba(region.color, 0.95),
@@ -1762,7 +1733,7 @@ export default function BoardDetailPage() {
                           setError('Failed to delete region.');
                         }
                       }}
-                      className="text-xs leading-none text-rose-500 hover:text-rose-700"
+                      className="text-xs leading-none text-destructive transition hover:opacity-80"
                       aria-label="Delete region"
                       title="Delete region"
                     >
@@ -1847,7 +1818,7 @@ export default function BoardDetailPage() {
                         event.stopPropagation();
                         setSelectedCard(card);
                       }}
-                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-sm hover:bg-slate-100"
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-sm hover:bg-accent"
                       title="Open card"
                       aria-label="Open card"
                     >
@@ -1900,51 +1871,49 @@ export default function BoardDetailPage() {
         aria-label="Create card"
       />
 
-      {showCreateChooser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-[90vw] max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Add to board</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Choose action</h3>
-            <div className="mt-4 grid gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateChooser(false);
-                  setShowImport(false);
-                  if (isMobile) {
-                    openCreatePageFromBoard(spawnPoint ?? undefined);
-                    return;
-                  }
-                  setShowCreate(true);
-                }}
-                className="rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                Create new card
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateChooser(false);
-                  setShowImport(true);
-                  setSelectedImportIds(new Set());
-                }}
-                className="rounded-xl border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                Import from card box
-              </button>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowCreateChooser(false)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-            </div>
+      <Dialog open={showCreateChooser} onOpenChange={setShowCreateChooser}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Add to board</div>
+            <DialogTitle>Choose action</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto justify-start rounded-xl px-4 py-3 text-left"
+              onClick={() => {
+                setShowCreateChooser(false);
+                setShowImport(false);
+                if (isMobile) {
+                  openCreatePageFromBoard(spawnPoint ?? undefined);
+                  return;
+                }
+                setShowCreate(true);
+              }}
+            >
+              Create new card
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto justify-start rounded-xl px-4 py-3 text-left"
+              onClick={() => {
+                setShowCreateChooser(false);
+                setShowImport(true);
+                setSelectedImportIds(new Set());
+              }}
+            >
+              Import from card box
+            </Button>
           </div>
-        </div>
-      )}
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={() => setShowCreateChooser(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {showCreate && (
         <CardCreateOverlay
@@ -1955,35 +1924,36 @@ export default function BoardDetailPage() {
         />
       )}
 
-      {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+      <Dialog open={showImport} onOpenChange={setShowImport}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Import</div>
-                <div className="text-lg font-semibold text-slate-900">Card Box</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Import</div>
+                <div className="text-lg font-semibold text-card-foreground">Card Box</div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="icon"
                 onClick={() => {
                   setShowImport(false);
                   setSelectedImportIds(new Set());
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+                className="rounded-full"
                 aria-label="Close"
                 title="Close"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                   <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
-              </button>
+              </Button>
             </div>
             <div className="space-y-4 px-6 py-5">
-              <input
+              <Input
                 value={importQuery}
                 onChange={(event) => setImportQuery(event.target.value)}
                 placeholder="Search cards to import..."
-                className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                className="rounded-full"
               />
               <div className="grid max-h-[45vh] gap-3 overflow-y-auto md:grid-cols-2">
                 {importCandidates.map((card) => {
@@ -2004,96 +1974,88 @@ export default function BoardDetailPage() {
                         });
                       }}
                       className={`rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                        selected ? 'border-slate-900 bg-slate-900/10' : 'border-slate-200 bg-white'
+                        selected ? 'border-foreground bg-accent/70 ring-1 ring-ring/30' : 'border-border bg-card hover:bg-accent/30'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold text-slate-900">{card.title}</div>
+                        <div className="text-sm font-semibold text-card-foreground">{card.title}</div>
                         <div
                           className={`h-4 w-4 rounded-full border ${
-                            selected ? 'border-slate-900 bg-slate-900' : 'border-slate-300'
+                            selected ? 'border-foreground bg-foreground' : 'border-border'
                           }`}
                         />
                       </div>
-                      <p className="mt-2 text-xs text-slate-600">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         {(card.content ?? '').slice(0, 120) || 'No content yet.'}
                       </p>
                     </button>
                   );
                 })}
                 {importCandidates.length === 0 && (
-                  <div className="text-sm text-slate-500">No cards available to import.</div>
+                  <div className="text-sm text-muted-foreground">No cards available to import.</div>
                 )}
               </div>
               <div className="flex items-center justify-between">
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-muted-foreground">
                   {selectedImportIds.size > 0
                     ? `${selectedImportIds.size} selected`
                     : 'Select cards to import'}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleImportBatch}
-                  disabled={selectedImportIds.size === 0}
-                  className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
-                >
+                <Button type="button" onClick={handleImportBatch} disabled={selectedImportIds.size === 0}>
                   Import selected
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {showShare && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+      <Dialog open={showShare} onOpenChange={setShowShare}>
+        <DialogContent className="max-w-2xl overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Share</div>
-                <div className="text-lg font-semibold text-slate-900">Board share links</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Share</div>
+                <div className="text-lg font-semibold text-card-foreground">Board share links</div>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="icon"
                 onClick={() => {
                   setShowShare(false);
                   setShareError('');
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
+                className="rounded-full"
                 aria-label="Close"
                 title="Close"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                   <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
-              </button>
+              </Button>
             </div>
             <div className="space-y-4 px-6 py-5">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-600">Create a public view link for this board.</div>
-                <button
-                  type="button"
-                  onClick={handleCreateShareLink}
-                  disabled={shareBusy}
-                  className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                >
+                <div className="text-sm text-muted-foreground">Create a public view link for this board.</div>
+                <Button type="button" onClick={handleCreateShareLink} disabled={shareBusy}>
                   Create link
-                </button>
+                </Button>
               </div>
               <div className="relative">
-                <input
+                <Input
                   type={showSharePassword ? 'text' : 'password'}
                   value={sharePassword}
                   onChange={(event) => setSharePassword(event.target.value)}
                   minLength={6}
                   maxLength={12}
                   placeholder="Optional password (6-12 chars)"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-10 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  className="pr-10 text-xs"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setShowSharePassword((prev) => !prev)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  className="absolute right-2 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   aria-label={showSharePassword ? 'Hide password' : 'Show password'}
                   title={showSharePassword ? 'Hide password' : 'Show password'}
                 >
@@ -2120,23 +2082,20 @@ export default function BoardDetailPage() {
                       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" fill="none" />
                     </svg>
                   )}
-                </button>
+                </Button>
               </div>
-              {shareError && <div className="text-xs text-rose-600">{shareError}</div>}
+              {shareError && <div className="text-xs text-destructive">{shareError}</div>}
               <div className="max-h-[45vh] space-y-2 overflow-y-auto">
                 {shareLinks.map((link) => {
                   const shareUrl = toShareUrl(link.token);
                   const isRevoked = !!link.revoked_at;
                   const isExpired = !!link.expires_at && new Date(link.expires_at) < new Date();
                   return (
-                    <div
-                      key={link.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50/60 p-3"
-                    >
-                      <div className="text-xs font-medium text-slate-500">{shareUrl}</div>
+                    <div key={link.id} className="rounded-xl border border-border bg-muted/60 p-3">
+                      <div className="text-xs font-medium text-muted-foreground">{shareUrl}</div>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-[11px]">
-                          <span className="rounded-full border border-slate-300 px-2 py-0.5 text-slate-600">
+                          <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
                             {link.permission}
                           </span>
                           {link.password_protected && (
@@ -2156,26 +2115,30 @@ export default function BoardDetailPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const copied = await copyToClipboard(shareUrl);
-                              if (!copied) {
-                                setShareError('Copy failed in this browser. Please copy the URL manually.');
-                              }
-                            }}
-                            className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
-                          >
-                            Copy
-                          </button>
-                          {!isRevoked && (
-                            <button
+                            <Button
                               type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                const copied = await copyToClipboard(shareUrl);
+                                if (!copied) {
+                                  setShareError('Copy failed in this browser. Please copy the URL manually.');
+                                }
+                              }}
+                              className="rounded-full text-[11px]"
+                            >
+                              Copy
+                            </Button>
+                          {!isRevoked && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
                               onClick={() => handleRevokeShareLink(link.id)}
-                              className="rounded-full border border-rose-200 px-3 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                              className="rounded-full border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                             >
                               Revoke
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -2183,91 +2146,66 @@ export default function BoardDetailPage() {
                   );
                 })}
                 {shareLinks.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+                  <div className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                     No share links yet.
                   </div>
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {showRename && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Edit board</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Update details</h3>
-            <input
+      <Dialog open={showRename} onOpenChange={setShowRename}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Edit board</div>
+            <DialogTitle>Update details</DialogTitle>
+          </DialogHeader>
+          <Input
               value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               placeholder="Board name"
-              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
-            <input
+            <Input
               value={tagValue}
               onChange={(event) => setTagValue(event.target.value)}
               placeholder="Tags (comma separated)"
-              className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
-            <textarea
+            <Textarea
               value={descriptionValue}
               onChange={(event) => setDescriptionValue(event.target.value)}
               placeholder="Description"
               rows={4}
-              className="mt-3 w-full resize-y rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
-            {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRename(false);
-                  setError('');
-                }}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
+            {error && <div className="text-xs text-destructive">{error}</div>}
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => { setShowRename(false); setError(''); }}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRenameBoard}
-                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
-              >
+              </Button>
+              <Button type="button" onClick={handleRenameBoard}>
                 Save
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete board</div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
-            <p className="mt-3 text-sm text-slate-600">
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Delete board</div>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
               This will remove the board and its layout. Cards remain in your card box.
-            </p>
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(false)}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteBoard}
-                className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
-              >
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteBoard} className="bg-rose-600 text-white hover:bg-rose-700">
                 Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {boardSummary && (
         <BoardCopyToSpaceModal
@@ -2287,16 +2225,17 @@ export default function BoardDetailPage() {
         />
       )}
 
-      {showRegionName && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+      <Dialog open={showRegionName} onOpenChange={(open) => (!open ? closeRegionNameModal() : undefined)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {editingRegionId ? 'Rename region' : 'Create region'}
             </div>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">
+            <DialogTitle>
               {editingRegionId ? 'Update region name' : 'Name this region'}
-            </h3>
-            <input
+            </DialogTitle>
+          </DialogHeader>
+            <Input
               value={regionNameValue}
               onChange={(event) => {
                 setRegionNameValue(event.target.value);
@@ -2305,11 +2244,10 @@ export default function BoardDetailPage() {
                 }
               }}
               placeholder="Region name"
-              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300"
             />
             <div className="mt-3">
-              <label className="mb-1 block text-xs font-medium text-slate-500">Color</label>
-              <p className="mb-2 text-[11px] text-slate-500">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Color</label>
+              <p className="mb-2 text-[11px] text-muted-foreground">
                 Choose a preset color, or use the picker below for a custom color.
               </p>
               <div className="mb-2 flex flex-wrap gap-2">
@@ -2320,7 +2258,7 @@ export default function BoardDetailPage() {
                       key={preset}
                       type="button"
                       onClick={() => setRegionColorValue(preset)}
-                      className={`h-6 w-6 rounded-full border ${selected ? 'ring-2 ring-slate-400 ring-offset-1' : ''}`}
+                      className={`h-6 w-6 rounded-full border ${selected ? 'ring-2 ring-ring ring-offset-1 ring-offset-background' : ''}`}
                       style={{ backgroundColor: preset, borderColor: selected ? '#334155' : '#cbd5e1' }}
                       title={preset}
                       aria-label={`Use color ${preset}`}
@@ -2334,30 +2272,21 @@ export default function BoardDetailPage() {
                 onChange={(event) => {
                   setRegionColorValue(normalizeRegionColor(event.target.value));
                 }}
-                className="h-10 w-20 cursor-pointer rounded-lg border border-slate-200 bg-white p-1"
+                className="h-10 w-20 cursor-pointer rounded-lg border border-border bg-background p-1"
                 aria-label="Region color"
               />
             </div>
-            {regionNameError && <div className="mt-2 text-xs text-rose-600">{regionNameError}</div>}
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={closeRegionNameModal}
-                className="text-xs font-medium text-slate-500 hover:text-slate-700"
-              >
+            {regionNameError && <div className="mt-2 text-xs text-destructive">{regionNameError}</div>}
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={closeRegionNameModal}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveRegionName}
-                className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
-              >
+              </Button>
+              <Button type="button" onClick={handleSaveRegionName}>
                 Save
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

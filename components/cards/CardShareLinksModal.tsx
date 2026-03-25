@@ -2,6 +2,17 @@
 
 import { useState } from 'react';
 import { CardShareLink } from '../../lib/noteToolApi';
+import { Button } from '../ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
+import { ScrollArea } from '../ui/scroll-area';
 
 type CardShareLinksModalProps = {
   open: boolean;
@@ -32,54 +43,41 @@ export default function CardShareLinksModal({
 }: CardShareLinksModalProps) {
   const [showPassword, setShowPassword] = useState(false);
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Share</div>
-            <div className="text-lg font-semibold text-slate-900">Card share links</div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-50"
-            aria-label="Close"
-            title="Close"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-              <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-        <div className="space-y-4 px-6 py-5">
+    <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Card share links</DialogTitle>
+          <DialogDescription>Create and manage share links for this card.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-600">Create a public view link for this card.</div>
-            <button
+            <Button
               type="button"
               onClick={onCreate}
               disabled={busy}
-              className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+              size="sm"
             >
               Create link
-            </button>
+            </Button>
           </div>
           <div className="relative">
-            <input
+            <Input
               type={showPassword ? 'text' : 'password'}
               value={sharePassword}
               onChange={(event) => onSharePasswordChange(event.target.value)}
               minLength={6}
               maxLength={12}
               placeholder="Optional password (6-12 chars)"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-10 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="pr-10 text-xs"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full text-slate-500 hover:text-slate-700"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               title={showPassword ? 'Hide password' : 'Show password'}
             >
@@ -106,10 +104,11 @@ export default function CardShareLinksModal({
                   <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" fill="none" />
                 </svg>
               )}
-            </button>
+            </Button>
           </div>
           {error && <div className="text-xs text-rose-600">{error}</div>}
-          <div className="max-h-[45vh] space-y-2 overflow-y-auto">
+          <ScrollArea className="max-h-[45vh]">
+            <div className="space-y-2 pr-4">
             {links.map((link) => {
               const shareUrl = toShareUrl(link.token);
               const isRevoked = !!link.revoked_at;
@@ -119,35 +118,43 @@ export default function CardShareLinksModal({
                   <div className="text-xs font-medium text-slate-500">{shareUrl}</div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className="rounded-full border border-slate-300 px-2 py-0.5 text-slate-600">{link.permission}</span>
+                      <Badge variant="outline">{link.permission}</Badge>
                       {link.password_protected && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                        <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-700">
                           password
-                        </span>
+                        </Badge>
                       )}
                       {isRevoked && (
-                        <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-600">revoked</span>
+                        <Badge variant="secondary" className="border-rose-200 bg-rose-50 text-rose-600">
+                          revoked
+                        </Badge>
                       )}
                       {!isRevoked && isExpired && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">expired</span>
+                        <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-700">
+                          expired
+                        </Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => void onCopy(shareUrl)}
-                        className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-[11px]"
                       >
                         Copy
-                      </button>
+                      </Button>
                       {!isRevoked && (
-                        <button
+                        <Button
                           type="button"
                           onClick={() => void onRevoke(link.id)}
-                          className="rounded-full border border-rose-200 px-3 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50"
                         >
                           Revoke
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -159,9 +166,10 @@ export default function CardShareLinksModal({
                 No share links yet.
               </div>
             )}
-          </div>
+            </div>
+          </ScrollArea>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

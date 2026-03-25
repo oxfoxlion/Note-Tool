@@ -9,12 +9,14 @@ type CardViewModeSwitchProps = {
 };
 
 export default function CardViewModeSwitch({ isMobile, viewMode, onChange }: CardViewModeSwitchProps) {
+  const baseButtonClassName = 'rounded-full p-2 transition';
+
   return (
-    <div className="flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
+    <div className="flex items-center rounded-full border border-border bg-card px-1 py-1 shadow-sm">
       <button
         type="button"
         onClick={() => onChange('edit')}
-        className={`rounded-full p-2 ${viewMode === 'edit' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+        className={`${baseButtonClassName} ${viewMode === 'edit' ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}`}
         title="Edit"
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -25,7 +27,7 @@ export default function CardViewModeSwitch({ isMobile, viewMode, onChange }: Car
       <button
         type="button"
         onClick={() => onChange('view')}
-        className={`rounded-full p-2 ${viewMode === 'view' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+        className={`${baseButtonClassName} ${viewMode === 'view' ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}`}
         title="Preview"
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
@@ -42,7 +44,7 @@ export default function CardViewModeSwitch({ isMobile, viewMode, onChange }: Car
         <button
           type="button"
           onClick={() => onChange('split')}
-          className={`rounded-full p-2 ${viewMode === 'split' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+          className={`${baseButtonClassName} ${viewMode === 'split' ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'}`}
           title="Split"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">

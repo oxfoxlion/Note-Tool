@@ -1,9 +1,12 @@
+import type { ComponentProps } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
 import type { Card } from '../lib/noteToolApi';
+
+type MarkdownInputProps = ComponentProps<'input'>;
 
 type CardPreviewProps = {
   card: Card;
@@ -52,10 +55,10 @@ export default function CardPreview({
     typeof previewLength === 'number' ? (compiled ? truncate(compiled, previewLength) : '') : compiled;
   const body = (
     <>
-      <div className="text-sm font-semibold text-slate-900">{card.title}</div>
+      <div className="text-sm font-semibold text-card-foreground">{card.title}</div>
       {renderMarkdown ? (
         <div
-          className={`prose prose-sm mt-2 max-w-none overflow-x-auto overflow-y-auto text-slate-700 ${
+          className={`card-preview-surface prose prose-sm mt-2 max-w-none overflow-x-auto overflow-y-auto text-sm text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground ${
             fillHeight ? 'h-full max-h-none' : 'max-h-[600px]'
           }`}
         >
@@ -64,7 +67,7 @@ export default function CardPreview({
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
               components={{
-                input: ({ ...props }: any) =>
+                input: ({ ...props }: MarkdownInputProps) =>
                   props.type === 'checkbox' ? (
                     <input type="checkbox" checked={Boolean(props.checked)} disabled readOnly />
                   ) : (
@@ -75,11 +78,11 @@ export default function CardPreview({
               {prepareMarkdown(content)}
             </ReactMarkdown>
           ) : (
-            <p className="text-xs text-slate-500">No content yet.</p>
+            <p className="text-xs text-muted-foreground">No content yet.</p>
           )}
         </div>
       ) : (
-        <p className="mt-2 text-xs leading-relaxed text-slate-600">
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           {previewText ? previewText : 'No content yet.'}
         </p>
       )}
@@ -89,7 +92,7 @@ export default function CardPreview({
   if (!interactive) {
     return (
       <div
-        className={`w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm ${
+        className={`w-full rounded-xl border border-border bg-card p-4 text-left text-card-foreground shadow-sm ${
           fillHeight ? 'h-full' : ''
         }`}
       >
@@ -102,7 +105,7 @@ export default function CardPreview({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+      className={`w-full rounded-xl border border-border bg-card p-4 text-left text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent/40 hover:shadow-md ${
         fillHeight ? 'h-full' : ''
       }`}
     >

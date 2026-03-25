@@ -1,6 +1,16 @@
 'use client';
 
 import { BoardSummary } from '../../lib/noteToolApi';
+import { Button } from '../ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
+import { ScrollArea } from '../ui/scroll-area';
 
 type CardRemoveFromBoardModalProps = {
   open: boolean;
@@ -21,44 +31,42 @@ export default function CardRemoveFromBoardModal({
   onClose,
   onRemove,
 }: CardRemoveFromBoardModalProps) {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Remove from board</div>
-        <h3 className="mt-2 text-lg font-semibold text-slate-900">{cardTitle}</h3>
-        <p className="mt-2 text-sm text-slate-600">Choose which board to remove this card from.</p>
-        {error && <div className="mt-3 text-xs text-rose-600">{error}</div>}
-        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+    <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{cardTitle}</DialogTitle>
+          <DialogDescription>Choose which board to remove this card from.</DialogDescription>
+        </DialogHeader>
+        {error && <div className="text-xs text-destructive">{error}</div>}
+        <ScrollArea className="max-h-64">
+          <div className="space-y-2 pr-4">
           {boards.map((board) => (
-            <button
+            <Button
               key={board.id}
               type="button"
               onClick={() => void onRemove(board.id)}
               disabled={busyBoardId === board.id}
-              className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              variant="outline"
+              className="flex h-auto w-full items-center justify-between rounded-xl bg-card px-3 py-2 text-left text-sm text-card-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
             >
               <span className="truncate">{board.name}</span>
-              <span className="text-xs text-slate-400">{busyBoardId === board.id ? 'Removing…' : `#${board.id}`}</span>
-            </button>
+              <span className="text-xs text-muted-foreground">{busyBoardId === board.id ? 'Removing…' : `#${board.id}`}</span>
+            </Button>
           ))}
           {boards.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+            <div className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
               This card is not loaded in any board, so there is nothing to remove.
             </div>
           )}
-        </div>
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-          >
+          </div>
+        </ScrollArea>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

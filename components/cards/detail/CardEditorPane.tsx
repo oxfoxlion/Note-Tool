@@ -52,7 +52,7 @@ export default function CardEditorPane({
           onSelect={onMentionSelect}
         />
       </div>
-      <div className="flex justify-end text-xs text-slate-500">{isSaving ? 'Saving…' : 'Autosave on'}</div>
+      <div className="flex justify-end text-xs text-muted-foreground">{isSaving ? 'Saving…' : 'Autosave on'}</div>
     </div>
   );
 }

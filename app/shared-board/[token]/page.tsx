@@ -6,6 +6,9 @@ import CardOverlay from '../../../components/CardOverlay';
 import CardPreview from '../../../components/CardPreview';
 import StatusPage from '../../../components/StatusPage';
 import { Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
+import { Button } from '../../../components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
+import ThemeToggle from '../../../components/theme/ThemeToggle';
 
 type RegionView = {
   id: number;
@@ -310,7 +313,7 @@ export default function SharedBoardPage() {
   }, [boardName]);
 
   if (loading) {
-    return <div className="p-8 text-sm text-slate-500">Loading shared board...</div>;
+    return <div className="p-8 text-sm text-muted-foreground">Loading shared board...</div>;
   }
 
   if (errorKind === 'not_found') {
@@ -332,82 +335,79 @@ export default function SharedBoardPage() {
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-slate-100">
+    <div className="h-screen w-screen overflow-hidden bg-background">
       <div className="relative h-full w-full">
         <div className="pointer-events-none absolute left-6 top-6 z-20">
-          <h1 className="text-2xl font-semibold text-slate-900 [text-shadow:0_2px_8px_rgba(15,23,42,0.18)]">
+          <h1 className="text-2xl font-semibold text-foreground [text-shadow:0_2px_8px_rgba(15,23,42,0.18)]">
             {boardName || 'Shared Board'}
           </h1>
-          <div className="mt-1 text-xs text-slate-500">Read-only shared view</div>
+          <div className="mt-1 text-xs text-muted-foreground">Read-only shared view</div>
         </div>
 
-        <div className="absolute right-6 top-6 z-30 flex items-center rounded-full border border-slate-200 bg-white px-1 py-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => handleOpenModeChange('modal')}
-            className={`rounded-full p-2 ${
-              cardOpenMode === 'modal' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-            title="Open in modal"
-            aria-label="Open in modal"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-              <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOpenModeChange('sidepanel')}
-            className={`rounded-full p-2 ${
-              cardOpenMode === 'sidepanel' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-            title="Open in side panel"
-            aria-label="Open in side panel"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-              <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
-              <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
-            </svg>
-          </button>
+        <div className="absolute right-6 top-6 z-30">
+          <div className="flex items-center gap-2">
+            <Tabs value={cardOpenMode} onValueChange={(value) => handleOpenModeChange(value as 'modal' | 'sidepanel')}>
+              <TabsList className="rounded-full bg-card shadow-sm">
+                <TabsTrigger value="modal" className="rounded-full px-3" title="Open in modal" aria-label="Open in modal">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                  </svg>
+                </TabsTrigger>
+                <TabsTrigger value="sidepanel" className="rounded-full px-3" title="Open in side panel" aria-label="Open in side panel">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                    <rect x="4" y="6" width="16" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
+                    <path d="M14 6v12" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <ThemeToggle className="rounded-full bg-card shadow-sm" />
+          </div>
         </div>
 
-        <div className="absolute bottom-6 right-6 z-30 flex flex-col items-center gap-2 rounded-full border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Zoom</div>
-          <button
+        <div className="absolute bottom-6 right-6 z-30 flex flex-col items-center gap-2 rounded-full border border-border bg-background/90 p-3 shadow-sm backdrop-blur">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Zoom</div>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() =>
               setViewport((prev) => ({
                 ...prev,
                 scale: Math.min(2.4, prev.scale + 0.1),
               }))
             }
-            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+            className="h-9 w-9 rounded-full text-card-foreground hover:bg-accent hover:text-accent-foreground"
             title="Zoom in"
           >
             +
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() =>
               setViewport((prev) => ({
                 ...prev,
                 scale: Math.max(0.25, prev.scale - 0.1),
               }))
             }
-            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+            className="h-9 w-9 rounded-full text-card-foreground hover:bg-accent hover:text-accent-foreground"
             title="Zoom out"
           >
             -
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setViewport({ x: 0, y: 0, scale: 1 })}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100"
+            className="h-9 w-9 rounded-full text-card-foreground hover:bg-accent hover:text-accent-foreground"
             title="Reset"
           >
             1:1
-          </button>
-          <div className="text-[10px] text-slate-500">{Math.round(viewport.scale * 100)}%</div>
+          </Button>
+          <div className="text-[10px] text-muted-foreground">{Math.round(viewport.scale * 100)}%</div>
         </div>
 
         <div
@@ -420,7 +420,7 @@ export default function SharedBoardPage() {
           onPointerMove={movePan}
           onPointerUp={endPan}
           onPointerCancel={endPan}
-          className="absolute inset-0 touch-none cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,#cbd5f5_1px,transparent_0)] [background-size:28px_28px] active:cursor-grabbing"
+          className="absolute inset-0 touch-none cursor-grab overflow-hidden bg-[radial-gradient(circle_at_1px_1px,var(--board-grid-dot)_1px,transparent_0)] [background-size:28px_28px] active:cursor-grabbing"
         >
           <div
             className="absolute inset-0"
@@ -442,7 +442,7 @@ export default function SharedBoardPage() {
                 }}
               >
                 <div
-                  className="absolute left-0 top-0 -translate-y-full rounded-md border bg-white/95 px-2 py-1 text-xs font-semibold leading-4 shadow-sm"
+                  className="absolute left-0 top-0 -translate-y-full rounded-md border bg-background/95 px-2 py-1 text-xs font-semibold leading-4 shadow-sm backdrop-blur"
                   style={{
                     borderColor: hexToRgba(region.color, 0.35),
                     color: hexToRgba(region.color, 0.95),

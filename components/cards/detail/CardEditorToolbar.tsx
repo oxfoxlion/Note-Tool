@@ -31,12 +31,15 @@ export default function CardEditorToolbar({
   onLink,
   onImage,
 }: CardEditorToolbarProps) {
+  const buttonClassName =
+    'flex h-8 w-8 items-center justify-center rounded-md text-card-foreground transition hover:bg-accent hover:text-accent-foreground';
+
   return (
-    <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600">
+    <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card px-2 py-2 text-xs text-muted-foreground">
       <button
         type="button"
         onClick={onHeading}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Heading (add #)"
         aria-label="Heading"
       >
@@ -45,7 +48,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onBold}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Bold"
         aria-label="Bold"
       >
@@ -54,7 +57,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onItalic}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Italic"
         aria-label="Italic"
       >
@@ -63,7 +66,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onUnderline}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Underline"
         aria-label="Underline"
       >
@@ -72,7 +75,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onStrikethrough}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Strikethrough"
         aria-label="Strikethrough"
       >
@@ -81,7 +84,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onInlineCode}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Inline code"
         aria-label="Inline code"
       >
@@ -90,7 +93,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onBulletedList}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Bulleted list"
         aria-label="Bulleted list"
       >
@@ -104,7 +107,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onNumberedList}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Numbered list"
         aria-label="Numbered list"
       >
@@ -116,7 +119,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onQuote}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Quote"
         aria-label="Quote"
       >
@@ -128,7 +131,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onCheckbox}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Checkbox"
         aria-label="Checkbox"
       >
@@ -141,7 +144,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onTable}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Table"
         aria-label="Table"
       >
@@ -153,7 +156,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onLink}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Link"
         aria-label="Link"
       >
@@ -175,7 +178,7 @@ export default function CardEditorToolbar({
       <button
         type="button"
         onClick={onImage}
-        className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-100"
+        className={buttonClassName}
         title="Image"
         aria-label="Image"
       >

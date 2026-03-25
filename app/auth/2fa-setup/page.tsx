@@ -4,6 +4,17 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE } from '../../../lib/api';
 import Link from 'next/link';
+import Image from 'next/image';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent } from '../../../components/ui/card';
+import ThemeToggle from '../../../components/theme/ThemeToggle';
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    return typeof error.response?.data?.message === 'string' ? error.response.data.message : fallback;
+  }
+  return fallback;
+}
 
 export default function Setup2FAPage() {
   const [qrCodeUrl, setQrCodeUrl] = useState('');
@@ -47,15 +58,14 @@ export default function Setup2FAPage() {
 
         setMessage(response.data.message || 'Failed to set up 2FA.');
         setMessageType('error');
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('2FA Setup error:', error);
-        if (error?.response?.status === 401) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
           setMessage('You are not logged in.');
           setMessageType('error');
           return;
         }
-        const errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
-        setMessage(errorMessage);
+        setMessage(getApiErrorMessage(error, 'An unexpected error occurred.'));
         setMessageType('error');
       }
     };
@@ -76,13 +86,15 @@ export default function Setup2FAPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
-      <div className="w-full max-w-md p-8 space-y-6 text-center bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-gray-900">Set Up Two-Factor Authentication</h1>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <ThemeToggle className="fixed right-4 top-4 rounded-full" />
+      <Card className="w-full max-w-md border-border bg-card text-center shadow-md">
+        <CardContent className="space-y-6 p-8">
+        <h1 className="text-2xl font-bold text-card-foreground">Set Up Two-Factor Authentication</h1>
         {message && (
           <div
-            className={`p-3 rounded-md ${
-              messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            className={`rounded-md p-3 text-sm ${
+              messageType === 'success' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'
             }`}
           >
             {message}
@@ -90,42 +102,46 @@ export default function Setup2FAPage() {
         )}
         {qrCodeUrl && (
           <div className="flex justify-center">
-            <img src={qrCodeUrl} alt="2FA QR Code" className="h-auto w-52 max-w-full sm:w-64" />
+            <Image
+              src={qrCodeUrl}
+              alt="2FA QR Code"
+              width={256}
+              height={256}
+              unoptimized
+              className="h-auto w-52 max-w-full sm:w-64"
+            />
           </div>
         )}
         {authAppUrl && (
           <div className="flex flex-col items-center gap-2">
             <a
               href={authAppUrl}
-              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+              className="inline-flex min-h-9 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               Open Authenticator App
             </a>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 rounded-md hover:bg-indigo-200"
-            >
+            <Button type="button" variant="outline" onClick={handleCopy}>
               Copy setup link
-            </button>
-            {copyMessage && <div className="text-xs text-gray-600">{copyMessage}</div>}
+            </Button>
+            {copyMessage && <div className="text-xs text-muted-foreground">{copyMessage}</div>}
           </div>
         )}
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           After scanning,{' '}
-          <Link href="/auth/verify" className="font-medium text-indigo-600 hover:text-indigo-500">
+          <Link href="/auth/verify" className="font-medium text-foreground hover:text-muted-foreground">
             proceed to verify
           </Link>
           .
         </p>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           Not now?{' '}
-          <Link href="/boards" className="font-medium text-indigo-600 hover:text-indigo-500">
+          <Link href="/boards" className="font-medium text-foreground hover:text-muted-foreground">
             Skip for now
           </Link>
           .
         </p>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

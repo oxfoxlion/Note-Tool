@@ -5,6 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createCard, createCardInBoard, updateBoardCardPosition } from '../../../../lib/noteToolApi';
 import { useCurrentSpace } from '../../../../hooks/useCurrentSpace';
 
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof Error && error.message === 'UNAUTHORIZED';
+}
+
 export default function CardCreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,8 +53,8 @@ export default function CardCreatePage() {
         const created = await createCard({ title: title.trim(), content, space_id: currentSpaceId });
         router.push(`/cards/${created.id}`);
       }
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }

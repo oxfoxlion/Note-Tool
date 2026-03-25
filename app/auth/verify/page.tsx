@@ -4,6 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { API_BASE } from '../../../lib/api';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent } from '../../../components/ui/card';
+import { Input } from '../../../components/ui/input';
+import ThemeToggle from '../../../components/theme/ThemeToggle';
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    return typeof error.response?.data?.message === 'string' ? error.response.data.message : fallback;
+  }
+  return fallback;
+}
 
 export default function VerifyPage() {
   const [message, setMessage] = useState('');
@@ -55,50 +66,49 @@ export default function VerifyPage() {
         setMessage(response.data.message || 'Verification failed. Invalid code.');
         setMessageType('error');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('2FA API error:', error);
-      const errorMessage = error.response?.data?.message || 'An unexpected error occurred during verification.';
-      setMessage(errorMessage);
+      setMessage(getApiErrorMessage(error, 'An unexpected error occurred during verification.'));
       setMessageType('error');
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-center text-gray-900">Two-Step Verification</h1>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <ThemeToggle className="fixed right-4 top-4 rounded-full" />
+      <Card className="w-full max-w-md border-border bg-card shadow-md">
+        <CardContent className="space-y-6 p-8">
+        <h1 className="text-center text-2xl font-bold text-card-foreground">Two-Step Verification</h1>
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="token" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="token" className="block text-sm font-medium text-foreground">
               Verification Code
             </label>
-            <input
+            <Input
               id="token"
               name="token"
               type="text"
               required
-              className="block w-full px-3 py-2 mt-1 text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md shadow-sm appearance-none focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1"
             />
           </div>
           <div>
-            <button
-              type="submit"
-              className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
+            <Button type="submit" className="w-full">
               Verify
-            </button>
+            </Button>
           </div>
         </form>
         {message && (
           <div
-            className={`p-3 rounded-md text-center ${
-              messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            className={`rounded-md p-3 text-center text-sm ${
+              messageType === 'success' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'
             }`}
           >
             {message}
           </div>
         )}
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
