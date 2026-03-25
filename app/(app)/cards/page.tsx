@@ -18,9 +18,11 @@ import {
   updateUserSettings,
   removeCardFromBoard,
 } from '../../../lib/noteToolApi';
+import { useCurrentSpace } from '../../../hooks/useCurrentSpace';
 
 export default function CardsPage() {
   const router = useRouter();
+  const { currentSpaceId } = useCurrentSpace();
   const [isMobile, setIsMobile] = useState(false);
   const [isXl, setIsXl] = useState(true);
   const [cards, setCards] = useState<Card[]>([]);
@@ -73,8 +75,8 @@ export default function CardsPage() {
     const load = async () => {
       try {
         const [cardsData, boardsData, settingsData] = await Promise.all([
-          getCards(),
-          getBoards(),
+          getCards(currentSpaceId),
+          getBoards(null, currentSpaceId),
           getUserSettings(),
         ]);
         setCards(cardsData);
@@ -95,7 +97,7 @@ export default function CardsPage() {
       }
     };
     load();
-  }, [router]);
+  }, [router, currentSpaceId]);
 
   useEffect(() => {
     const loadBoardCards = async () => {
@@ -137,7 +139,7 @@ export default function CardsPage() {
 
   const handleCreate = async (payload: { title: string; content: string }) => {
     setError('');
-    const created = await createCard({ title: payload.title, content: payload.content });
+    const created = await createCard({ title: payload.title, content: payload.content, space_id: currentSpaceId });
     const nextAll = [created, ...allCards];
     setAllCards(nextAll);
     if (!boardFilter) {

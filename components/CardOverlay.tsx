@@ -12,9 +12,12 @@ import { markdownSanitizeSchema } from '../lib/markdownSanitize';
 import type { Card } from '../lib/noteToolApi';
 import { useCardShare } from '../hooks/useCardShare';
 import { useCardBoardMembership } from '../hooks/useCardBoardMembership';
+import { useCurrentSpace } from '../hooks/useCurrentSpace';
 import CardActionsMenu from './cards/CardActionsMenu';
 import CardShareLinksModal from './cards/CardShareLinksModal';
 import CardRemoveFromBoardModal from './cards/CardRemoveFromBoardModal';
+import CardCopyToSpaceModal from './cards/CardCopyToSpaceModal';
+import { copyCardToSpace, getSpaces, Space } from '../lib/noteToolApi';
 
 type CardOverlayProps = {
   card: Card;
@@ -64,12 +67,18 @@ export default function CardOverlay({
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCardMenu, setShowCardMenu] = useState(false);
+  const [showCopyToSpace, setShowCopyToSpace] = useState(false);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const [copySuccessMessage, setCopySuccessMessage] = useState('');
   const [mounted, setMounted] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const prevCardIdRef = useRef(card.id);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [showMentions, setShowMentions] = useState(false);
+  const { currentSpaceId } = useCurrentSpace();
 
   const share = useCardShare(card.id);
   const removeMembership = useCardBoardMembership(card.id);
@@ -90,6 +99,25 @@ export default function CardOverlay({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!showCopyToSpace) return;
+    let active = true;
+    const loadSpaces = async () => {
+      try {
+        const data = await getSpaces();
+        if (!active) return;
+        setSpaces(data);
+      } catch {
+        if (!active) return;
+        setCopyError('Failed to load spaces.');
+      }
+    };
+    void loadSpaces();
+    return () => {
+      active = false;
+    };
+  }, [showCopyToSpace]);
 
   useEffect(() => {
     if (mode !== 'sidepanel') return;
@@ -593,8 +621,35 @@ export default function CardOverlay({
     void removeMembership.openRemovePicker();
   }, [removeMembership]);
 
+  const handleOpenCopyMenu = useCallback(() => {
+    setShowCardMenu(false);
+    setCopyError('');
+    setCopySuccessMessage('');
+    setShowCopyToSpace(true);
+  }, []);
+
+  const handleCopyToSpace = useCallback(async (targetSpaceId: number) => {
+    setCopyError('');
+    setCopySuccessMessage('');
+    setCopyBusySpaceId(targetSpaceId);
+    try {
+      const copied = await copyCardToSpace(card.id, targetSpaceId);
+      setCopySuccessMessage(`Copied as card #${copied.id}.`);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        ((err as { message?: string })?.message === 'UNAUTHORIZED'
+          ? 'Login expired. Please sign in again.'
+          : 'Failed to copy card.');
+      setCopyError(message);
+    } finally {
+      setCopyBusySpaceId(null);
+    }
+  }, [card.id]);
+
   const actionItems = [
     { id: 'share', label: 'Share card', onClick: handleOpenShareMenu },
+    { id: 'copy-to-space', label: 'Copy to space', onClick: handleOpenCopyMenu },
     ...(onRemoveFromBoard
       ? [{ id: 'remove', label: 'Remove from board', onClick: handleOpenRemoveMenu }]
       : []),
@@ -866,6 +921,22 @@ export default function CardOverlay({
           removeMembership.closeRemovePicker();
           onClose();
         }}
+      />
+
+      <CardCopyToSpaceModal
+        open={showCopyToSpace}
+        cardTitle={card.title}
+        spaces={spaces}
+        currentSpaceId={currentSpaceId}
+        busySpaceId={copyBusySpaceId}
+        error={copyError}
+        successMessage={copySuccessMessage}
+        onClose={() => {
+          setShowCopyToSpace(false);
+          setCopyError('');
+          setCopySuccessMessage('');
+        }}
+        onCopy={handleCopyToSpace}
       />
 
       {showDeleteConfirm && (

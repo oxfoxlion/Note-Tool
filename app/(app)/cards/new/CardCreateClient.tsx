@@ -3,10 +3,12 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createCard, createCardInBoard, updateBoardCardPosition } from '../../../../lib/noteToolApi';
+import { useCurrentSpace } from '../../../../hooks/useCurrentSpace';
 
 export default function CardCreatePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { currentSpaceId } = useCurrentSpace();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -44,7 +46,7 @@ export default function CardCreatePage() {
         }
         router.push(`/boards/${boardContext.boardId}`);
       } else {
-        const created = await createCard({ title: title.trim(), content });
+        const created = await createCard({ title: title.trim(), content, space_id: currentSpaceId });
         router.push(`/cards/${created.id}`);
       }
     } catch (err: any) {

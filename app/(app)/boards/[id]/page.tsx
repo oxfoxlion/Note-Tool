@@ -8,8 +8,10 @@ import CardPreview from '../../../../components/CardPreview';
 import {
   addExistingCardToBoard,
   BoardShareLink,
+  Board,
   BoardRegion as ApiBoardRegion,
   Card,
+  copyBoardToSpace,
   createBoardRegion,
   createBoardShareLink,
   createCardInBoard,
@@ -20,6 +22,8 @@ import {
   getBoard,
   getBoardRegions,
   getCards,
+  getSpaces,
+  Space,
   getUserSettings,
   removeCardFromBoard,
   updateBoardRegion,
@@ -29,6 +33,8 @@ import {
   updateCard,
   updateUserSettings,
 } from '../../../../lib/noteToolApi';
+import { useCurrentSpace } from '../../../../hooks/useCurrentSpace';
+import BoardCopyToSpaceModal from '../../../../components/boards/BoardCopyToSpaceModal';
 
 type BoardRegionView = {
   id: number;
@@ -93,6 +99,7 @@ function findCardById(cards: Card[], targetCardId: number): Card | null {
 export default function BoardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { currentSpaceId } = useCurrentSpace();
   const boardId = Number(params.id);
   const toolbarStorageKey = 'note_tool_board_toolbar_visible';
   const [isMobile, setIsMobile] = useState(false);
@@ -124,6 +131,7 @@ export default function BoardDetailPage() {
   const [renameValue, setRenameValue] = useState('');
   const [tagValue, setTagValue] = useState('');
   const [descriptionValue, setDescriptionValue] = useState('');
+  const [boardSummary, setBoardSummary] = useState<Board | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -132,6 +140,11 @@ export default function BoardDetailPage() {
   const [shareError, setShareError] = useState('');
   const [sharePassword, setSharePassword] = useState('');
   const [showSharePassword, setShowSharePassword] = useState(false);
+  const [showCopyToSpace, setShowCopyToSpace] = useState(false);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const [copySuccessMessage, setCopySuccessMessage] = useState('');
   const [regions, setRegions] = useState<BoardRegionView[]>([]);
   const [draftRegion, setDraftRegion] = useState<DraftRegion | null>(null);
   const [showRegionName, setShowRegionName] = useState(false);
@@ -248,10 +261,11 @@ export default function BoardDetailPage() {
       try {
         const [boardData, cardsData, settingsData, regionsData] = await Promise.all([
           getBoard(boardId),
-          getCards(),
+          getCards(currentSpaceId),
           getUserSettings(),
           getBoardRegions(boardId),
         ]);
+        setBoardSummary(boardData.board);
         setBoardName(boardData.board.name);
         setRenameValue(boardData.board.name);
         setTagValue((boardData.board.tags ?? []).join(', '));
@@ -284,7 +298,7 @@ export default function BoardDetailPage() {
     if (Number.isFinite(boardId)) {
       load();
     }
-  }, [boardId, router]);
+  }, [boardId, router, currentSpaceId]);
 
   const searchResults = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -1183,6 +1197,44 @@ export default function BoardDetailPage() {
     }
   };
 
+  const handleOpenCopyToSpace = async () => {
+    setShowBoardMenu(false);
+    setCopyError('');
+    setCopySuccessMessage('');
+    try {
+      const data = await getSpaces();
+      setSpaces(data);
+      setShowCopyToSpace(true);
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to load spaces.');
+    }
+  };
+
+  const handleCopyBoardToSpace = async (targetSpaceId: number) => {
+    try {
+      setCopyError('');
+      setCopySuccessMessage('');
+      setCopyBusySpaceId(targetSpaceId);
+      const copied = await copyBoardToSpace(boardId, targetSpaceId);
+      setCopySuccessMessage(`Copied as board #${copied.id}.`);
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
+        router.push('/auth/login');
+        return;
+      }
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to copy board.';
+      setCopyError(message);
+    } finally {
+      setCopyBusySpaceId(null);
+    }
+  };
+
   const toShareUrl = (token: string) => {
     if (typeof window === 'undefined') return `/shared-board/${token}`;
     return `${window.location.origin}/shared-board/${token}`;
@@ -1410,6 +1462,13 @@ export default function BoardDetailPage() {
                       className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                     >
                       Share board
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenCopyToSpace}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Copy to space
                     </button>
                     <button
                       type="button"
@@ -2208,6 +2267,24 @@ export default function BoardDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {boardSummary && (
+        <BoardCopyToSpaceModal
+          open={showCopyToSpace}
+          boardTitle={boardSummary.name}
+          spaces={spaces}
+          currentSpaceId={currentSpaceId ?? boardSummary.space_id ?? null}
+          busySpaceId={copyBusySpaceId}
+          error={copyError}
+          successMessage={copySuccessMessage}
+          onClose={() => {
+            setShowCopyToSpace(false);
+            setCopyError('');
+            setCopySuccessMessage('');
+          }}
+          onCopy={handleCopyBoardToSpace}
+        />
       )}
 
       {showRegionName && (

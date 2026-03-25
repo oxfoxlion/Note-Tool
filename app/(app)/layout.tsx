@@ -8,18 +8,25 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { API_BASE } from '../../lib/api';
 import {
   BoardFolder,
+  Space,
   createBoardFolder,
+  createSpace,
   deleteBoardFolder,
+  deleteSpace,
   getBoardFolders,
+  getSpaces,
   getUserProfile,
   reorderBoardFolders,
   updateBoardFolder,
 } from '../../lib/noteToolApi';
+import { useCurrentSpace } from '../../hooks/useCurrentSpace';
 
-const navItems = [
-  { href: '/cards', label: 'Card Box' },
-];
-const FOLDER_ORDER_STORAGE_KEY = 'note_tool_folder_order';
+const LEGACY_FOLDER_ORDER_STORAGE_KEY = 'note_tool_folder_order';
+const SPACE_ORDER_STORAGE_KEY = 'note_tool_space_order';
+
+function getFolderOrderStorageKey(spaceId: number | null) {
+  return spaceId ? `note_tool_folder_order_${spaceId}` : LEGACY_FOLDER_ORDER_STORAGE_KEY;
+}
 
 function sortFoldersForUi(folders: BoardFolder[]) {
   return [...folders].sort((a, b) => {
@@ -30,10 +37,12 @@ function sortFoldersForUi(folders: BoardFolder[]) {
   });
 }
 
-function applyStoredCustomOrder(folders: BoardFolder[]) {
+function applyStoredCustomOrder(folders: BoardFolder[], spaceId: number | null) {
   if (typeof window === 'undefined') return sortFoldersForUi(folders);
   try {
-    const raw = window.localStorage.getItem(FOLDER_ORDER_STORAGE_KEY);
+    const raw =
+      window.localStorage.getItem(getFolderOrderStorageKey(spaceId)) ??
+      window.localStorage.getItem(LEGACY_FOLDER_ORDER_STORAGE_KEY);
     if (!raw) return sortFoldersForUi(folders);
     const storedIds = JSON.parse(raw) as number[];
     if (!Array.isArray(storedIds)) return sortFoldersForUi(folders);
@@ -57,10 +66,40 @@ function applyStoredCustomOrder(folders: BoardFolder[]) {
   }
 }
 
-function saveCustomOrder(ids: number[]) {
+function saveCustomOrder(ids: number[], spaceId: number | null) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(FOLDER_ORDER_STORAGE_KEY, JSON.stringify(ids));
+    window.localStorage.setItem(getFolderOrderStorageKey(spaceId), JSON.stringify(ids));
+  } catch {
+    // ignore storage write failure
+  }
+}
+
+function applyStoredSpaceOrder(spaces: Space[]) {
+  if (spaces.length <= 1) return spaces;
+  const defaultSpace = spaces.find((space) => space.is_default) ?? null;
+  const customSpaces = spaces.filter((space) => !space.is_default);
+  if (typeof window === 'undefined') {
+    return defaultSpace ? [defaultSpace, ...customSpaces] : customSpaces;
+  }
+  try {
+    const raw = window.localStorage.getItem(SPACE_ORDER_STORAGE_KEY);
+    if (!raw) return defaultSpace ? [defaultSpace, ...customSpaces] : customSpaces;
+    const storedIds = JSON.parse(raw) as number[];
+    if (!Array.isArray(storedIds)) return defaultSpace ? [defaultSpace, ...customSpaces] : customSpaces;
+    const byId = new Map(customSpaces.map((space) => [space.id, space]));
+    const ordered = storedIds.map((id) => byId.get(id) ?? null).filter((space): space is Space => Boolean(space));
+    const tail = customSpaces.filter((space) => !storedIds.includes(space.id));
+    return defaultSpace ? [defaultSpace, ...ordered, ...tail] : [...ordered, ...tail];
+  } catch {
+    return defaultSpace ? [defaultSpace, ...customSpaces] : customSpaces;
+  }
+}
+
+function saveSpaceOrder(ids: number[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SPACE_ORDER_STORAGE_KEY, JSON.stringify(ids));
   } catch {
     // ignore storage write failure
   }
@@ -70,10 +109,18 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { currentSpaceId, setCurrentSpaceId } = useCurrentSpace();
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [displayName, setDisplayName] = useState('User');
-  const [folders, setFolders] = useState<BoardFolder[]>([]);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [foldersBySpace, setFoldersBySpace] = useState<Record<number, BoardFolder[]>>({});
+  const [expandedSpaceIds, setExpandedSpaceIds] = useState<number[]>([]);
+  const [openSpaceMenuId, setOpenSpaceMenuId] = useState<number | null>(null);
+  const [creatingSpaceAfterId, setCreatingSpaceAfterId] = useState<number | null>(null);
+  const [newSpaceName, setNewSpaceName] = useState('');
+  const [spaceError, setSpaceError] = useState('');
+  const [deletingSpace, setDeletingSpace] = useState<Space | null>(null);
   const [showFolderCreate, setShowFolderCreate] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [folderError, setFolderError] = useState('');
@@ -85,6 +132,9 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const boardsSectionRef = useRef<HTMLDivElement | null>(null);
   const folderMenuAreaRef = useRef<HTMLDivElement | null>(null);
   const lastFolderMutationRef = useRef(0);
+  const selectedFolderId = Number(searchParams.get('folderId'));
+  const hasSelectedFolder = pathname === '/boards' && Number.isInteger(selectedFolderId) && selectedFolderId > 0;
+  const currentFolders = currentSpaceId ? foldersBySpace[currentSpaceId] ?? [] : [];
 
   useEffect(() => {
     const root = document.documentElement;
@@ -107,48 +157,113 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    const loadFolders = async () => {
+    const loadSidebar = async () => {
       const requestStartedAt = Date.now();
       try {
-        const data = await getBoardFolders();
+        const spacesData = applyStoredSpaceOrder(await getSpaces());
         if (!active) return;
         if (requestStartedAt < lastFolderMutationRef.current) return;
-        setFolders(applyStoredCustomOrder(data));
+        const folderEntries = await Promise.all(
+          spacesData.map(async (space) => [space.id, applyStoredCustomOrder(await getBoardFolders(space.id), space.id)] as const)
+        );
+        if (!active) return;
+        if (requestStartedAt < lastFolderMutationRef.current) return;
+        setSpaces(spacesData);
+        setFoldersBySpace(Object.fromEntries(folderEntries));
+
+        const fallbackSpace = spacesData.find((space) => space.is_default) ?? spacesData[0] ?? null;
+        const nextCurrentSpaceId =
+          currentSpaceId && spacesData.some((space) => space.id === currentSpaceId)
+            ? currentSpaceId
+            : fallbackSpace?.id ?? null;
+        if (nextCurrentSpaceId !== currentSpaceId) {
+          setCurrentSpaceId(nextCurrentSpaceId);
+        }
+        if (nextCurrentSpaceId) {
+          setExpandedSpaceIds((prev) =>
+            prev.length > 0 ? Array.from(new Set([...prev, nextCurrentSpaceId])) : [nextCurrentSpaceId]
+          );
+        }
       } catch (error) {
-        console.error('Failed to load folders:', error);
+        console.error('Failed to load sidebar:', error);
       }
     };
-    loadFolders();
+    void loadSidebar();
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentSpaceId, setCurrentSpaceId]);
 
   useEffect(() => {
-    if (openFolderMenuId === null) return;
+    if (openFolderMenuId === null && openSpaceMenuId === null) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (!folderMenuAreaRef.current) return;
       if (!folderMenuAreaRef.current.contains(event.target as Node)) {
         setOpenFolderMenuId(null);
+        setOpenSpaceMenuId(null);
       }
     };
     window.addEventListener('mousedown', handleClickOutside);
     return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [openFolderMenuId]);
+  }, [openFolderMenuId, openSpaceMenuId]);
 
   useEffect(() => {
-    if (!showFolderCreate) return;
+    if (!showFolderCreate && creatingSpaceAfterId === null) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (!boardsSectionRef.current) return;
       if (!boardsSectionRef.current.contains(event.target as Node)) {
         setShowFolderCreate(false);
+        setCreatingSpaceAfterId(null);
       }
     };
     window.addEventListener('mousedown', handleClickOutside);
     return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [showFolderCreate]);
+  }, [showFolderCreate, creatingSpaceAfterId]);
+
+  const updateFoldersForSpace = (spaceId: number, updater: (folders: BoardFolder[]) => BoardFolder[]) => {
+    setFoldersBySpace((prev) => ({
+      ...prev,
+      [spaceId]: updater(prev[spaceId] ?? []),
+    }));
+  };
+
+  const handleSelectSpaceRoute = (spaceId: number, href: string) => {
+    setCurrentSpaceId(spaceId);
+    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
+    setOpenSpaceMenuId(null);
+    setOpenFolderMenuId(null);
+    setCreatingSpaceAfterId(null);
+    setShowFolderCreate(false);
+    router.push(href);
+    if (isMobile) {
+      setCollapsed(true);
+    }
+  };
+
+  const toggleSpaceExpanded = (spaceId: number) => {
+    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev.filter((id) => id !== spaceId) : [...prev, spaceId]));
+  };
+
+  const persistCurrentSpaceOrder = (nextSpaces: Space[]) => {
+    saveSpaceOrder(nextSpaces.filter((space) => !space.is_default).map((space) => space.id));
+  };
+
+  const insertSpaceBelow = (current: Space[], targetSpaceId: number, newSpace: Space) => {
+    const next = [...current];
+    const targetIndex = next.findIndex((space) => space.id === targetSpaceId);
+    if (targetIndex < 0) {
+      next.push(newSpace);
+      return next;
+    }
+    next.splice(targetIndex + 1, 0, newSpace);
+    return next;
+  };
 
   const handleCreateFolder = async () => {
+    if (!currentSpaceId) {
+      setFolderError('Select a space first.');
+      return;
+    }
     const name = newFolderName.trim();
     if (!name) {
       setFolderError('Folder name is required.');
@@ -156,14 +271,100 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     }
     try {
       lastFolderMutationRef.current = Date.now();
-      const created = await createBoardFolder({ name });
-      setFolders((prev) => sortFoldersForUi([...prev, created]));
+      const created = await createBoardFolder({ name, space_id: currentSpaceId });
+      updateFoldersForSpace(currentSpaceId, (prev) => sortFoldersForUi([...prev, created]));
       setNewFolderName('');
       setFolderError('');
       setShowFolderCreate(false);
+      setExpandedSpaceIds((prev) => (prev.includes(currentSpaceId) ? prev : [...prev, currentSpaceId]));
       router.push(`/boards?folderId=${created.id}`);
-    } catch (error) {
+    } catch {
       setFolderError('Failed to create folder.');
+    }
+  };
+
+  const handleOpenCreateFolder = (spaceId: number) => {
+    setCurrentSpaceId(spaceId);
+    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
+    setOpenSpaceMenuId(null);
+    setCreatingSpaceAfterId(null);
+    setNewSpaceName('');
+    setSpaceError('');
+    setShowFolderCreate(true);
+    setFolderError('');
+  };
+
+  const handleOpenCreateSpace = (spaceId: number) => {
+    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
+    setOpenSpaceMenuId(null);
+    setShowFolderCreate(false);
+    setNewFolderName('');
+    setFolderError('');
+    setCreatingSpaceAfterId(spaceId);
+    setNewSpaceName('');
+    setSpaceError('');
+  };
+
+  const handleCreateSpaceBelow = async (spaceId: number) => {
+    const name = newSpaceName.trim();
+    if (!name) {
+      setSpaceError('Space name is required.');
+      return;
+    }
+    if (name.length > 60) {
+      setSpaceError('Space name must be 60 characters or fewer.');
+      return;
+    }
+    try {
+      const created = await createSpace({ name });
+      setSpaces((prev) => {
+        const next = insertSpaceBelow(prev, spaceId, created);
+        persistCurrentSpaceOrder(next);
+        return next;
+      });
+      setFoldersBySpace((prev) => ({ ...prev, [created.id]: [] }));
+      setCurrentSpaceId(created.id);
+      setExpandedSpaceIds((prev) => Array.from(new Set([...prev, spaceId, created.id])));
+      setCreatingSpaceAfterId(null);
+      setNewSpaceName('');
+      setSpaceError('');
+      router.push('/boards');
+    } catch (error: unknown) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to create space.';
+      setSpaceError(message);
+    }
+  };
+
+  const handleDeleteSpace = async () => {
+    if (!deletingSpace) return;
+    try {
+      const deletedId = deletingSpace.id;
+      await deleteSpace(deletedId);
+      const remainingSpaces = spaces.filter((space) => space.id !== deletedId);
+      persistCurrentSpaceOrder(remainingSpaces);
+      setSpaces(remainingSpaces);
+      setFoldersBySpace((prev) => {
+        const next = { ...prev };
+        delete next[deletedId];
+        return next;
+      });
+      setExpandedSpaceIds((prev) => prev.filter((id) => id !== deletedId));
+      setOpenSpaceMenuId(null);
+      const fallbackSpace =
+        remainingSpaces.find((space) => space.is_default) ?? remainingSpaces[0] ?? null;
+      if (currentSpaceId === deletedId) {
+        setCurrentSpaceId(fallbackSpace?.id ?? null);
+        router.push('/boards');
+      }
+      setDeletingSpace(null);
+      setSpaceError('');
+    } catch (error: unknown) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to delete space.';
+      setSpaceError(message);
     }
   };
 
@@ -187,12 +388,15 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     try {
       lastFolderMutationRef.current = Date.now();
       const updated = await updateBoardFolder(folder.id, { name: nextName });
-      setFolders((prev) => sortFoldersForUi(prev.map((item) => (item.id === folder.id ? updated : item))));
+      const spaceId = folder.space_id ?? currentSpaceId;
+      if (spaceId) {
+        updateFoldersForSpace(spaceId, (prev) => sortFoldersForUi(prev.map((item) => (item.id === folder.id ? updated : item))));
+      }
       setOpenFolderMenuId(null);
       setRenamingFolder(null);
       setRenameFolderValue('');
       setRenameFolderError('');
-    } catch (error) {
+    } catch {
       setRenameFolderError('Failed to rename folder.');
     }
   };
@@ -202,10 +406,13 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     try {
       lastFolderMutationRef.current = Date.now();
       await deleteBoardFolder(folder.id);
-      setFolders((prev) => sortFoldersForUi(prev.filter((item) => item.id !== folder.id)));
+      const spaceId = folder.space_id ?? currentSpaceId;
+      if (spaceId) {
+        updateFoldersForSpace(spaceId, (prev) => sortFoldersForUi(prev.filter((item) => item.id !== folder.id)));
+      }
       setOpenFolderMenuId(null);
       setDeletingFolder(null);
-      if (hasSelectedFolder && selectedFolderId === folder.id) {
+      if (hasSelectedFolder && selectedFolderId === folder.id && currentSpaceId === (folder.space_id ?? currentSpaceId)) {
         router.push('/boards');
       }
     } catch {
@@ -214,8 +421,9 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   };
 
   const applyFolderOrder = async (orderedCustomIds: number[]) => {
+    if (!currentSpaceId) return;
     lastFolderMutationRef.current = Date.now();
-    const current = folders;
+    const current = currentFolders;
     const customById = new Map(current.filter((item) => !item.is_system).map((item) => [item.id, item]));
     const archive = current.find((item) => item.system_key === 'archive') ?? null;
     const nextCustom = orderedCustomIds
@@ -226,18 +434,18 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       })
       .filter((item): item is BoardFolder => Boolean(item));
     const optimistic = sortFoldersForUi(archive ? [...nextCustom, archive] : nextCustom);
-    setFolders(optimistic);
-    saveCustomOrder(orderedCustomIds);
+    updateFoldersForSpace(currentSpaceId, () => optimistic);
+    saveCustomOrder(orderedCustomIds, currentSpaceId);
     try {
-      const updated = await reorderBoardFolders(orderedCustomIds);
-      setFolders(sortFoldersForUi(updated));
-    } catch (error) {
+      const updated = await reorderBoardFolders(orderedCustomIds, currentSpaceId);
+      updateFoldersForSpace(currentSpaceId, () => sortFoldersForUi(updated));
+    } catch {
       setFolderError('Order saved locally. Server sync failed.');
     }
   };
 
   const moveFolderByOffset = async (folderId: number, delta: -1 | 1) => {
-    const custom = folders.filter((item) => !item.is_system);
+    const custom = currentFolders.filter((item) => !item.is_system);
     const index = custom.findIndex((item) => item.id === folderId);
     if (index < 0) return;
     const nextIndex = index + delta;
@@ -247,9 +455,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     ids.splice(nextIndex, 0, moved);
     await applyFolderOrder(ids);
   };
-
-  const selectedFolderId = Number(searchParams.get('folderId'));
-  const hasSelectedFolder = pathname === '/boards' && Number.isInteger(selectedFolderId) && selectedFolderId > 0;
 
   useEffect(() => {
     let active = true;
@@ -353,193 +558,277 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
             </div>
           </div>
           <nav className={`mt-8 flex-1 space-y-1 ${collapsed ? 'px-2' : 'px-4'}`}>
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => {
-                  if (isMobile) {
-                    setCollapsed(true);
-                  }
-                }}
-                className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-slate-800/60 hover:text-white ${
-                  pathname === item.href ? 'bg-slate-800/70 text-white' : ''
-                }`}
-                title={item.label}
-              >
-                <span>{item.label}</span>
-              </Link>
-            ))}
-
             <div ref={boardsSectionRef} className="rounded-lg">
-              <div
-                className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-slate-800/60 hover:text-white ${
-                  pathname === '/boards' ? 'bg-slate-800/70 text-white' : ''
-                }`}
-              >
-                <Link
-                  href="/boards"
-                  onClick={() => {
-                    if (isMobile) {
-                      setCollapsed(true);
-                    }
-                  }}
-                  className="min-w-0 flex-1"
-                  title="Boards"
-                >
-                  Boards
-                </Link>
-                {!collapsed && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowFolderCreate((prev) => !prev);
-                      setFolderError('');
-                    }}
-                    className="ml-2 rounded-full p-1 text-slate-300 hover:bg-slate-700 hover:text-white"
-                    title="Add folder"
-                    aria-label="Add folder"
-                  >
-                    +
-                  </button>
-                )}
-              </div>
-
-              {!collapsed && showFolderCreate && (
-                <div className="mt-2 rounded-lg border border-slate-700/50 bg-slate-900/30 p-2">
-                  <input
-                    value={newFolderName}
-                    onChange={(event) => {
-                      setNewFolderName(event.target.value);
-                      if (folderError) {
-                        setFolderError('');
-                      }
-                    }}
-                    placeholder="Folder name"
-                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
-                  />
-                  {folderError && <div className="mt-1 text-[11px] text-rose-300">{folderError}</div>}
-                  <div className="mt-2 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowFolderCreate(false);
-                        setNewFolderName('');
-                        setFolderError('');
-                      }}
-                      className="text-[11px] text-slate-300 hover:text-white"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCreateFolder}
-                      className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-900"
-                    >
-                      Create
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!collapsed && folders.length > 0 && (
-                <div ref={folderMenuAreaRef} className="mt-2 space-y-1 pr-1 pl-3">
-                  {folders.map((folder) => {
-                    const active = hasSelectedFolder && selectedFolderId === folder.id;
-                    return (
-                      <div key={folder.id} className="relative">
-                        <Link
-                          href={`/boards?folderId=${folder.id}`}
-                          draggable={false}
-                          onClick={(event) => {
-                            setOpenFolderMenuId(null);
-                            if (isMobile) {
-                              setCollapsed(true);
-                            }
-                          }}
-                          className={`flex items-center justify-between rounded-md px-3 py-1.5 text-xs transition ${
-                            active ? 'bg-slate-800/70 text-white' : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-                          }`}
-                          title={folder.name}
-                        >
-                          <span className="truncate pr-10">{folder.name}</span>
-                        </Link>
-                        {!folder.is_system && (
+              <div ref={folderMenuAreaRef} className="space-y-2">
+                {spaces.map((space) => {
+                  const isCurrentSpace = currentSpaceId === space.id;
+                  const isExpanded = expandedSpaceIds.includes(space.id) || isCurrentSpace;
+                  const folders = foldersBySpace[space.id] ?? [];
+                  return (
+                    <div key={space.id} className="rounded-lg">
+                      <div
+                        className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-slate-800/60 hover:text-white ${
+                          isCurrentSpace ? 'bg-slate-800/70 text-white' : ''
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
                           <button
                             type="button"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              setOpenFolderMenuId((prev) => (prev === folder.id ? null : folder.id));
+                            onClick={() => toggleSpaceExpanded(space.id)}
+                            className="rounded p-0.5 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            aria-label={isExpanded ? `Collapse ${space.name}` : `Expand ${space.name}`}
+                            title={isExpanded ? 'Collapse' : 'Expand'}
+                          >
+                            <svg viewBox="0 0 16 16" className={`h-3.5 w-3.5 transition ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">
+                              <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSpaceRoute(space.id, '/boards')}
+                            className="min-w-0 flex-1 text-left"
+                            title={space.name}
+                          >
+                            <span className="block truncate">{space.name}</span>
+                          </button>
+                        </div>
+                        {!collapsed && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenFolderMenuId(null);
+                              setOpenSpaceMenuId((prev) => (prev === space.id ? null : space.id));
                             }}
-                            className={`absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-[11px] ${
-                              active ? 'text-slate-100 hover:bg-slate-700' : 'text-slate-300 hover:bg-slate-700/80'
-                            }`}
-                            aria-label={`Folder actions for ${folder.name}`}
-                            title="Folder actions"
+                            className="ml-2 rounded-full px-1.5 py-1 text-[11px] text-slate-300 hover:bg-slate-700 hover:text-white"
+                            title="Space actions"
+                            aria-label={`Space actions for ${space.name}`}
                           >
                             ...
                           </button>
                         )}
-                        {openFolderMenuId === folder.id && !folder.is_system && (
-                          <div className="absolute right-1 top-full z-30 mt-1 w-36 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                void moveFolderByOffset(folder.id, -1);
-                                setOpenFolderMenuId(null);
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                            >
-                              Move up
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                void moveFolderByOffset(folder.id, 1);
-                                setOpenFolderMenuId(null);
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                            >
-                              Move down
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                setOpenFolderMenuId(null);
-                                setRenamingFolder(folder);
-                                setRenameFolderValue(folder.name);
-                                setRenameFolderError('');
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
-                            >
-                              Rename folder
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                setOpenFolderMenuId(null);
-                                setDeletingFolder(folder);
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-slate-800 hover:text-rose-200"
-                            >
-                              Delete folder
-                            </button>
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+
+                      {openSpaceMenuId === space.id && (
+                        <div className="relative">
+                          <div className="absolute right-2 top-1 z-30 w-40 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCreateFolder(space.id)}
+                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                            >
+                              Create folder
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCreateSpace(space.id)}
+                              className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                            >
+                              Add space below
+                            </button>
+                            {!space.is_default && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenSpaceMenuId(null);
+                                  setDeletingSpace(space);
+                                  setSpaceError('');
+                                }}
+                                className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-slate-800 hover:text-rose-200"
+                              >
+                                Delete space
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {!collapsed && isExpanded && (
+                        <div className="mt-1 space-y-1 pl-6 pr-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSpaceRoute(space.id, '/cards')}
+                            className={`flex w-full items-center rounded-md px-3 py-1.5 text-left text-xs transition ${
+                              pathname === '/cards' && isCurrentSpace
+                                ? 'bg-slate-800/70 text-white'
+                                : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                            }`}
+                            title="Card Box"
+                          >
+                            Card Box
+                          </button>
+
+                          {isCurrentSpace && showFolderCreate && (
+                            <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-2">
+                              <input
+                                value={newFolderName}
+                                onChange={(event) => {
+                                  setNewFolderName(event.target.value);
+                                  if (folderError) {
+                                    setFolderError('');
+                                  }
+                                }}
+                                placeholder="Folder name"
+                                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                              />
+                              {folderError && <div className="mt-1 text-[11px] text-rose-300">{folderError}</div>}
+                              <div className="mt-2 flex items-center justify-between">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowFolderCreate(false);
+                                    setNewFolderName('');
+                                    setFolderError('');
+                                  }}
+                                  className="text-[11px] text-slate-300 hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCreateFolder}
+                                  className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-900"
+                                >
+                                  Create
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {creatingSpaceAfterId === space.id && (
+                            <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-2">
+                              <input
+                                value={newSpaceName}
+                                onChange={(event) => {
+                                  setNewSpaceName(event.target.value);
+                                  if (spaceError) {
+                                    setSpaceError('');
+                                  }
+                                }}
+                                placeholder="Space name"
+                                className="w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                              />
+                              {spaceError && <div className="mt-1 text-[11px] text-rose-300">{spaceError}</div>}
+                              <div className="mt-2 flex items-center justify-between">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCreatingSpaceAfterId(null);
+                                    setNewSpaceName('');
+                                    setSpaceError('');
+                                  }}
+                                  className="text-[11px] text-slate-300 hover:text-white"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleCreateSpaceBelow(space.id)}
+                                  className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-900"
+                                >
+                                  Create
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {folders.map((folder) => {
+                            const active = isCurrentSpace && hasSelectedFolder && selectedFolderId === folder.id;
+                            return (
+                              <div key={folder.id} className="relative">
+                                <button
+                                  type="button"
+                                  draggable={false}
+                                  onClick={() => {
+                                    setOpenFolderMenuId(null);
+                                    handleSelectSpaceRoute(space.id, `/boards?folderId=${folder.id}`);
+                                  }}
+                                  className={`flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-xs transition ${
+                                    active ? 'bg-slate-800/70 text-white' : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                                  }`}
+                                  title={folder.name}
+                                >
+                                  <span className="truncate pr-10">{folder.name}</span>
+                                </button>
+                                {!folder.is_system && isCurrentSpace && (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setOpenFolderMenuId((prev) => (prev === folder.id ? null : folder.id));
+                                    }}
+                                    className={`absolute right-1 top-1/2 -translate-y-1/2 rounded px-1 text-[11px] ${
+                                      active ? 'text-slate-100 hover:bg-slate-700' : 'text-slate-300 hover:bg-slate-700/80'
+                                    }`}
+                                    aria-label={`Folder actions for ${folder.name}`}
+                                    title="Folder actions"
+                                  >
+                                    ...
+                                  </button>
+                                )}
+                                {openFolderMenuId === folder.id && !folder.is_system && isCurrentSpace && (
+                                  <div className="absolute right-1 top-full z-30 mt-1 w-36 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg">
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        void moveFolderByOffset(folder.id, -1);
+                                        setOpenFolderMenuId(null);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                                    >
+                                      Move up
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        void moveFolderByOffset(folder.id, 1);
+                                        setOpenFolderMenuId(null);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                                    >
+                                      Move down
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setOpenFolderMenuId(null);
+                                        setRenamingFolder(folder);
+                                        setRenameFolderValue(folder.name);
+                                        setRenameFolderError('');
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-slate-200 hover:bg-slate-800"
+                                    >
+                                      Rename folder
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setOpenFolderMenuId(null);
+                                        setDeletingFolder(folder);
+                                      }}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-rose-300 hover:bg-slate-800 hover:text-rose-200"
+                                    >
+                                      Delete folder
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <Link
@@ -608,7 +897,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
             <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete folder</div>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
             <p className="mt-3 text-sm text-slate-600">
-              This will delete "{deletingFolder.name}". Boards inside will move to no folder.
+              This will delete &quot;{deletingFolder.name}&quot;. Boards inside will move to no folder.
             </p>
             <div className="mt-5 flex items-center justify-between">
               <button
@@ -623,6 +912,38 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                 onClick={() => {
                   void handleDeleteFolder(deletingFolder);
                 }}
+                className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingSpace && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Delete space</div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">Are you sure?</h3>
+            <p className="mt-3 text-sm text-slate-600">
+              This will delete &quot;{deletingSpace.name}&quot; and everything inside this space.
+            </p>
+            {spaceError && <div className="mt-2 text-xs text-rose-600">{spaceError}</div>}
+            <div className="mt-5 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeletingSpace(null);
+                  setSpaceError('');
+                }}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteSpace()}
                 className="rounded-full bg-rose-600 px-4 py-2 text-xs font-semibold text-white"
               >
                 Delete

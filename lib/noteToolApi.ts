@@ -121,6 +121,7 @@ function authHeaders() {
 export type Card = {
   id: number;
   user_id: string;
+  space_id?: number;
   title: string;
   content: string | null;
   created_at: string;
@@ -134,6 +135,7 @@ export type Card = {
 export type Board = {
   id: number;
   user_id: string;
+  space_id?: number;
   folder_id?: number | null;
   name: string;
   description?: string | null;
@@ -145,6 +147,7 @@ export type Board = {
 export type BoardFolder = {
   id: number;
   user_id: string;
+  space_id?: number;
   name: string;
   is_system: boolean;
   system_key: string | null;
@@ -231,12 +234,41 @@ export type UserProfile = {
   twoFactorEnabled: boolean;
 };
 
-export async function getCards(): Promise<Card[]> {
-  const { data } = await api.get('/note_tool/card/', { headers: authHeaders() });
+export type Space = {
+  id: number;
+  user_id: string;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+};
+
+export async function getSpaces(): Promise<Space[]> {
+  const { data } = await api.get('/note_tool/space/', { headers: authHeaders() });
   return data;
 }
 
-export async function createCard(payload: { title: string; content?: string }) {
+export async function createSpace(payload: { name: string }) {
+  const { data } = await api.post('/note_tool/space/', payload, { headers: authHeaders() });
+  return data as Space;
+}
+
+export async function updateSpace(spaceId: number, payload: { name: string }) {
+  const { data } = await api.put(`/note_tool/space/${spaceId}`, payload, { headers: authHeaders() });
+  return data as Space;
+}
+
+export async function deleteSpace(spaceId: number) {
+  const { data } = await api.delete(`/note_tool/space/${spaceId}`, { headers: authHeaders() });
+  return data as Space;
+}
+
+export async function getCards(spaceId?: number | null): Promise<Card[]> {
+  const params = spaceId ? { space_id: spaceId } : undefined;
+  const { data } = await api.get('/note_tool/card/', { headers: authHeaders(), params });
+  return data;
+}
+
+export async function createCard(payload: { title: string; content?: string; space_id?: number | null }) {
   const { data } = await api.post('/note_tool/card/', payload, { headers: authHeaders() });
   return data as Card;
 }
@@ -274,6 +306,15 @@ export async function revokeCardShareLink(cardId: number, shareLinkId: number) {
   await api.delete(`/note_tool/card/${cardId}/share-links/${shareLinkId}`, { headers: authHeaders() });
 }
 
+export async function copyCardToSpace(cardId: number, spaceId: number) {
+  const { data } = await api.post(
+    `/note_tool/card/${cardId}/copy-to-space`,
+    { space_id: spaceId },
+    { headers: authHeaders() }
+  );
+  return data as Card;
+}
+
 export async function getSharedCardByToken(token: string): Promise<SharedCardPayload> {
   const { data } = await api.get(`/note_tool/card/share/${encodeURIComponent(token)}`);
   return data;
@@ -289,13 +330,15 @@ export async function getSharedCardMeta(token: string): Promise<SharedMetaPayloa
   return data;
 }
 
-export async function getBoards(folderId?: number | null): Promise<Board[]> {
-  const params = folderId ? { folder_id: folderId } : undefined;
+export async function getBoards(folderId?: number | null, spaceId?: number | null): Promise<Board[]> {
+  const params: Record<string, number> = {};
+  if (folderId) params.folder_id = folderId;
+  if (spaceId) params.space_id = spaceId;
   const { data } = await api.get('/note_tool/board/', { headers: authHeaders(), params });
   return data;
 }
 
-export async function createBoard(payload: { name: string; description?: string; folder_id?: number | null }) {
+export async function createBoard(payload: { name: string; description?: string; folder_id?: number | null; space_id?: number | null }) {
   const { data } = await api.post('/note_tool/board/', payload, { headers: authHeaders() });
   return data as Board;
 }
@@ -308,12 +351,13 @@ export async function updateBoard(
   return data as Board;
 }
 
-export async function getBoardFolders(): Promise<BoardFolder[]> {
-  const { data } = await api.get('/note_tool/board/folders', { headers: authHeaders() });
+export async function getBoardFolders(spaceId?: number | null): Promise<BoardFolder[]> {
+  const params = spaceId ? { space_id: spaceId } : undefined;
+  const { data } = await api.get('/note_tool/board/folders', { headers: authHeaders(), params });
   return data;
 }
 
-export async function createBoardFolder(payload: { name: string }) {
+export async function createBoardFolder(payload: { name: string; space_id?: number | null }) {
   const { data } = await api.post('/note_tool/board/folders', payload, { headers: authHeaders() });
   return data as BoardFolder;
 }
@@ -323,8 +367,9 @@ export async function updateBoardFolder(folderId: number, payload: { name: strin
   return data as BoardFolder;
 }
 
-export async function reorderBoardFolders(folderIds: number[]) {
-  const { data } = await api.put('/note_tool/board/folders/reorder', { folder_ids: folderIds }, { headers: authHeaders() });
+export async function reorderBoardFolders(folderIds: number[], spaceId?: number | null) {
+  const payload = spaceId ? { folder_ids: folderIds, space_id: spaceId } : { folder_ids: folderIds };
+  const { data } = await api.put('/note_tool/board/folders/reorder', payload, { headers: authHeaders() });
   return data as BoardFolder[];
 }
 
@@ -335,6 +380,15 @@ export async function deleteBoardFolder(folderId: number) {
 
 export async function deleteBoard(boardId: number) {
   await api.delete(`/note_tool/board/${boardId}`, { headers: authHeaders() });
+}
+
+export async function copyBoardToSpace(boardId: number, spaceId: number) {
+  const { data } = await api.post(
+    `/note_tool/board/${boardId}/copy-to-space`,
+    { space_id: spaceId },
+    { headers: authHeaders() }
+  );
+  return data as Board;
 }
 
 export async function getBoard(boardId: number) {

@@ -6,12 +6,14 @@ import { Card, getCards, updateCard } from '../lib/noteToolApi';
 type UseCardDetailStateParams = {
   cardId: string;
   autosaveEnabled: boolean;
+  spaceId: number | null;
   onUnauthorized: () => void;
 };
 
 export function useCardDetailState({
   cardId,
   autosaveEnabled,
+  spaceId,
   onUnauthorized,
 }: UseCardDetailStateParams) {
   const [card, setCard] = useState<Card | null>(null);
@@ -27,7 +29,7 @@ export function useCardDetailState({
   useEffect(() => {
     const load = async () => {
       try {
-        const cards = await getCards();
+        const cards = await getCards(spaceId);
         setAllCards(cards);
         const found = cards.find((item) => String(item.id) === String(cardId)) || null;
         setCard(found);
@@ -52,7 +54,7 @@ export function useCardDetailState({
     if (cardId) {
       void load();
     }
-  }, [cardId, onUnauthorized]);
+  }, [cardId, onUnauthorized, spaceId]);
 
   useEffect(() => {
     if (!card) return;

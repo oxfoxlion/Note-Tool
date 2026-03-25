@@ -6,16 +6,26 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Board,
   BoardFolder,
+  copyBoardToSpace,
   createBoard,
   deleteBoard,
   getBoardFolders,
   getBoards,
+  getSpaces,
+  Space,
   updateBoard,
 } from '../../../lib/noteToolApi';
+import { useCurrentSpace } from '../../../hooks/useCurrentSpace';
+import BoardCopyToSpaceModal from '../../../components/boards/BoardCopyToSpaceModal';
+
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof Error && error.message === 'UNAUTHORIZED';
+}
 
 export default function BoardsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { currentSpaceId } = useCurrentSpace();
   const [boards, setBoards] = useState<Board[]>([]);
   const [folders, setFolders] = useState<BoardFolder[]>([]);
   const [name, setName] = useState('');
@@ -33,6 +43,11 @@ export default function BoardsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [page, setPage] = useState(1);
   const [openBoardMenuId, setOpenBoardMenuId] = useState<number | null>(null);
+  const [copyingBoard, setCopyingBoard] = useState<Board | null>(null);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const [copySuccessMessage, setCopySuccessMessage] = useState('');
   const [viewportTier, setViewportTier] = useState<'sm' | 'md' | 'xl'>('xl');
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
   const selectedFolderId = (() => {
@@ -71,13 +86,13 @@ export default function BoardsPage() {
     const load = async () => {
       try {
         const [boardsData, foldersData] = await Promise.all([
-          getBoards(selectedFolderId),
-          getBoardFolders(),
+          getBoards(selectedFolderId, currentSpaceId),
+          getBoardFolders(currentSpaceId),
         ]);
         setBoards(boardsData);
         setFolders(foldersData);
-      } catch (err: any) {
-        if (err?.message === 'UNAUTHORIZED') {
+      } catch (err: unknown) {
+        if (isUnauthorizedError(err)) {
           router.push('/auth/login');
           return;
         }
@@ -85,7 +100,7 @@ export default function BoardsPage() {
       }
     };
     void load();
-  }, [router, selectedFolderId]);
+  }, [router, selectedFolderId, currentSpaceId]);
 
   useEffect(() => {
     if (!showTagMenu) return;
@@ -98,6 +113,25 @@ export default function BoardsPage() {
     window.addEventListener('mousedown', handleClick);
     return () => window.removeEventListener('mousedown', handleClick);
   }, [showTagMenu]);
+
+  useEffect(() => {
+    if (!copyingBoard) return;
+    let active = true;
+    const loadSpaces = async () => {
+      try {
+        const data = await getSpaces();
+        if (!active) return;
+        setSpaces(data);
+      } catch {
+        if (!active) return;
+        setCopyError('Failed to load spaces.');
+      }
+    };
+    void loadSpaces();
+    return () => {
+      active = false;
+    };
+  }, [copyingBoard]);
 
   useEffect(() => {
     if (openBoardMenuId === null) return;
@@ -116,11 +150,12 @@ export default function BoardsPage() {
       const board = await createBoard({
         name: name.trim(),
         folder_id: selectedFolderId ?? undefined,
+        space_id: currentSpaceId,
       });
       setBoards((prev) => [board, ...prev]);
       setName('');
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }
@@ -169,8 +204,8 @@ export default function BoardsPage() {
         )
       );
       setEditingBoard(null);
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }
@@ -185,8 +220,8 @@ export default function BoardsPage() {
       await deleteBoard(deletingBoard.id);
       setBoards((prev) => prev.filter((item) => item.id !== deletingBoard.id));
       setDeletingBoard(null);
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }
@@ -213,12 +248,34 @@ export default function BoardsPage() {
       } else if (!isArchived) {
         setBoards((prev) => prev.filter((item) => item.id !== board.id));
       }
-    } catch (err: any) {
-      if (err?.message === 'UNAUTHORIZED') {
+    } catch (err: unknown) {
+      if (isUnauthorizedError(err)) {
         router.push('/auth/login');
         return;
       }
       setError(isArchived ? 'Failed to unarchive board.' : 'Failed to archive board.');
+    }
+  };
+
+  const handleCopyBoard = async (targetSpaceId: number) => {
+    if (!copyingBoard) return;
+    try {
+      setCopyError('');
+      setCopySuccessMessage('');
+      setCopyBusySpaceId(targetSpaceId);
+      const copied = await copyBoardToSpace(copyingBoard.id, targetSpaceId);
+      setCopySuccessMessage(`Copied as board #${copied.id}.`);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to copy board.';
+      setCopyError(message);
+    } finally {
+      setCopyBusySpaceId(null);
     }
   };
 
@@ -437,6 +494,20 @@ export default function BoardsPage() {
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
+                          setCopyingBoard(board);
+                          setCopyError('');
+                          setCopySuccessMessage('');
+                          setOpenBoardMenuId(null);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        Copy to space
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
                           handleStartEdit(board);
                           setOpenBoardMenuId(null);
                         }}
@@ -626,6 +697,24 @@ export default function BoardsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {copyingBoard && (
+        <BoardCopyToSpaceModal
+          open={Boolean(copyingBoard)}
+          boardTitle={copyingBoard.name}
+          spaces={spaces}
+          currentSpaceId={currentSpaceId ?? copyingBoard.space_id ?? null}
+          busySpaceId={copyBusySpaceId}
+          error={copyError}
+          successMessage={copySuccessMessage}
+          onClose={() => {
+            setCopyingBoard(null);
+            setCopyError('');
+            setCopySuccessMessage('');
+          }}
+          onCopy={handleCopyBoard}
+        />
       )}
     </div>
   );

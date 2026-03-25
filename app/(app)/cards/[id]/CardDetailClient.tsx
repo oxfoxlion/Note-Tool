@@ -9,22 +9,31 @@ import { useCardActions } from '../../../../hooks/useCardActions';
 import CardActionsMenu from '../../../../components/cards/CardActionsMenu';
 import CardShareLinksModal from '../../../../components/cards/CardShareLinksModal';
 import CardRemoveFromBoardModal from '../../../../components/cards/CardRemoveFromBoardModal';
+import CardCopyToSpaceModal from '../../../../components/cards/CardCopyToSpaceModal';
 import CardEditorPane from '../../../../components/cards/detail/CardEditorPane';
 import CardPreviewPane from '../../../../components/cards/detail/CardPreviewPane';
 import CardViewModeSwitch from '../../../../components/cards/detail/CardViewModeSwitch';
 import { CardEditorToolbarProps } from '../../../../components/cards/detail/CardEditorToolbar';
 import { useCardMentions } from '../../../../hooks/useCardMentions';
 import { useMarkdownEditorTools } from '../../../../hooks/useMarkdownEditorTools';
+import { useCurrentSpace } from '../../../../hooks/useCurrentSpace';
+import { copyCardToSpace, getSpaces, Space } from '../../../../lib/noteToolApi';
 
 export default function CardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { currentSpaceId } = useCurrentSpace();
   const cardId = params.id;
   const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<'view' | 'edit' | 'split'>('view');
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [showCardMenu, setShowCardMenu] = useState(false);
+  const [showCopyToSpace, setShowCopyToSpace] = useState(false);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const [copySuccessMessage, setCopySuccessMessage] = useState('');
   const activeViewMode = isMobile && viewMode === 'split' ? 'view' : viewMode;
   const pageContainerClassName = isMobile
     ? 'flex h-[calc(100dvh-6rem)] min-h-0 flex-col gap-4 overflow-hidden'
@@ -43,6 +52,7 @@ export default function CardDetailPage() {
   const { card, allCards, title, setTitle, content, setContent, isSaving, error } = useCardDetailState({
     cardId,
     autosaveEnabled: activeViewMode !== 'view',
+    spaceId: currentSpaceId,
     onUnauthorized: handleUnauthorized,
   });
 
@@ -57,10 +67,66 @@ export default function CardDetailPage() {
   const markdownTools = useMarkdownEditorTools({ content, setContent, editorRef });
   const mentions = useCardMentions({ content, setContent, editorRef });
   const linkedCards = useCardLinks({ allCards, content, cardId: card?.id });
+
+  useEffect(() => {
+    if (!showCopyToSpace) return;
+    let active = true;
+    const loadSpaces = async () => {
+      try {
+        const data = await getSpaces();
+        if (!active) return;
+        setSpaces(data);
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+          handleUnauthorized();
+          return;
+        }
+        if (!active) return;
+        setCopyError('Failed to load spaces.');
+      }
+    };
+    void loadSpaces();
+    return () => {
+      active = false;
+    };
+  }, [showCopyToSpace, handleUnauthorized]);
+
+  const handleOpenCopyToSpace = useCallback(() => {
+    setCopyError('');
+    setCopySuccessMessage('');
+    setShowCopyToSpace(true);
+  }, []);
+
+  const handleCopyToSpace = useCallback(
+    async (targetSpaceId: number) => {
+      if (!card) return;
+      setCopyError('');
+      setCopySuccessMessage('');
+      setCopyBusySpaceId(targetSpaceId);
+      try {
+        const copied = await copyCardToSpace(card.id, targetSpaceId);
+        setCopySuccessMessage(`Copied as card #${copied.id}.`);
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+          handleUnauthorized();
+          return;
+        }
+        const message =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'Failed to copy card.';
+        setCopyError(message);
+      } finally {
+        setCopyBusySpaceId(null);
+      }
+    },
+    [card, handleUnauthorized]
+  );
+
   const { actionItems, share, removeMembership, handleRemoveFromBoard, handleCopyShareUrl } = useCardActions({
     card,
     boardId,
     closeMenu: () => setShowCardMenu(false),
+    onOpenCopyToSpace: handleOpenCopyToSpace,
     onUnauthorized: handleUnauthorized,
     onDeleted: () => router.push('/cards'),
     onNavigateBoard: (targetBoardId) => router.push(`/boards/${targetBoardId}`),
@@ -192,6 +258,24 @@ export default function CardDetailPage() {
           error={removeMembership.removeError}
           onClose={removeMembership.closeRemovePicker}
           onRemove={handleRemoveFromBoard}
+        />
+      )}
+
+      {card && (
+        <CardCopyToSpaceModal
+          open={showCopyToSpace}
+          cardTitle={card.title}
+          spaces={spaces}
+          currentSpaceId={currentSpaceId}
+          busySpaceId={copyBusySpaceId}
+          error={copyError}
+          successMessage={copySuccessMessage}
+          onClose={() => {
+            setShowCopyToSpace(false);
+            setCopyError('');
+            setCopySuccessMessage('');
+          }}
+          onCopy={handleCopyToSpace}
         />
       )}
     </div>

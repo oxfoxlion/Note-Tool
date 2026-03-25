@@ -8,6 +8,7 @@ type UseCardActionsParams = {
   card: Card | null;
   boardId: number | null;
   closeMenu: () => void;
+  onOpenCopyToSpace: () => void;
   onUnauthorized: () => void;
   onDeleted: () => void;
   onNavigateBoard: (boardId: number) => void;
@@ -17,6 +18,7 @@ export function useCardActions({
   card,
   boardId,
   closeMenu,
+  onOpenCopyToSpace,
   onUnauthorized,
   onDeleted,
   onNavigateBoard,
@@ -70,6 +72,14 @@ export function useCardActions({
       onClick: () => {
         closeMenu();
         void share.openShare();
+      },
+    },
+    {
+      id: 'copy-to-space',
+      label: 'Copy to space',
+      onClick: () => {
+        closeMenu();
+        onOpenCopyToSpace();
       },
     },
     {
