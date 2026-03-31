@@ -52,6 +52,34 @@ function clearAuthLocalState() {
 
 let hasHandledAuthExpired = false;
 
+function decodeJwtPayload(token: string) {
+  if (typeof window === 'undefined' || !token) return null;
+
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+
+  try {
+    const encodedPayload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const normalizedPayload = encodedPayload.padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
+    const decodedPayload = window.atob(normalizedPayload);
+    return JSON.parse(decodedPayload) as { exp?: number };
+  } catch (error) {
+    console.warn('Failed to decode auth token payload:', error);
+    return null;
+  }
+}
+
+function isAccessTokenStale(token: string, leewayMs = 30_000) {
+  if (!token) return false;
+
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) {
+    return false;
+  }
+
+  return payload.exp * 1000 <= Date.now() + leewayMs;
+}
+
 function handleAuthExpired() {
   if (typeof window === 'undefined' || hasHandledAuthExpired) return;
   hasHandledAuthExpired = true;
@@ -82,6 +110,31 @@ async function refreshAccessToken() {
     });
   return refreshPromise;
 }
+
+api.interceptors.request.use(async (config) => {
+  const requestUrl = String(config.url || '');
+  const isRefreshRequest = requestUrl.includes('/note_tool/auth/refresh');
+  const currentToken = readAccessToken();
+
+  if (isRefreshRequest || !currentToken) {
+    return config;
+  }
+
+  if (!isAccessTokenStale(currentToken)) {
+    return config;
+  }
+
+  const nextToken = await refreshAccessToken();
+  if (config.headers && typeof config.headers.set === 'function') {
+    config.headers.set('Authorization', `Bearer ${nextToken}`);
+  } else {
+    config.headers = axios.AxiosHeaders.from({
+      ...(config.headers || {}),
+      Authorization: `Bearer ${nextToken}`,
+    });
+  }
+  return config;
+});
 
 api.interceptors.response.use(
   (response) => response,
