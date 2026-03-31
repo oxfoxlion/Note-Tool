@@ -94,6 +94,19 @@ export default function LoginPage() {
         <h1 className="text-center text-2xl font-bold text-card-foreground">Login</h1>
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div>
+            <Button asChild type="button" variant="outline" className="w-full">
+              <a href={`${API_BASE}/note_tool/auth/google/start?redirect_to=%2Fboards`}>Continue with Google</a>
+            </Button>
+          </div>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
+          <div>
             <label htmlFor="email" className="block text-sm font-medium text-foreground">
               Email
             </label>
