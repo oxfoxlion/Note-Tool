@@ -94,7 +94,6 @@ export default function SharedCardClient({ token }: SharedCardClientProps) {
         <article className="card-preview-surface prose mt-8 max-w-none text-sm leading-relaxed text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground">
           <MDEditor.Markdown
             source={card.content || 'No content yet.'}
-            wrapperElement={{ 'data-color-mode': 'light' }}
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
           />

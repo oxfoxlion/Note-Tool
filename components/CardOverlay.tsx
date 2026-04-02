@@ -331,7 +331,6 @@ export default function CardOverlay({
     return (
       <MDEditor.Markdown
         source={preparedSource}
-        wrapperElement={{ 'data-color-mode': 'light' }}
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
         components={{
@@ -552,10 +551,7 @@ export default function CardOverlay({
     };
 
     return (
-      <div
-        data-color-mode="light"
-        className="card-editor-surface [&_.w-md-editor]:min-h-[280px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-border [&_.w-md-editor]:bg-muted [&_.w-md-editor]:text-card-foreground [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-input]:text-card-foreground [&_.w-md-editor-text-pre]:text-sm [&_.w-md-editor-text-pre]:text-card-foreground [&_.w-md-editor-text-container]:bg-muted [&_.wmde-markdown]:bg-muted [&_.wmde-markdown]:text-card-foreground"
-      >
+      <div className="card-editor-surface [&_.w-md-editor]:min-h-[280px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-border [&_.w-md-editor]:bg-muted [&_.w-md-editor]:text-card-foreground [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-input]:text-card-foreground [&_.w-md-editor-text-pre]:text-sm [&_.w-md-editor-text-pre]:text-card-foreground [&_.w-md-editor-text-container]:bg-muted [&_.wmde-markdown]:bg-muted [&_.wmde-markdown]:text-card-foreground">
         <MDEditor
           value={content}
           onChange={handleEditorChange}
@@ -660,8 +656,8 @@ export default function CardOverlay({
 
   const panelBody = (
     <>
-      <div className="relative flex h-full flex-col">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
+      <div className="relative flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
           <nav className="flex flex-1 items-center gap-2 text-xs font-medium text-muted-foreground">
             <Button type="button" variant="ghost" onClick={onClose} className="h-auto px-0 py-0 text-xs text-muted-foreground hover:bg-transparent hover:text-card-foreground">
               {breadcrumbRootLabel}
@@ -918,13 +914,13 @@ export default function CardOverlay({
 
   const overlay = mode === 'modal' ? (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-0">
         {panelBody}
       </DialogContent>
     </Dialog>
   ) : (
     <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent side="right" className="h-full w-full max-w-xl overflow-hidden p-0">
+      <SheetContent side="right" className="h-full w-full max-w-xl overflow-hidden border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-0">
         {panelBody}
       </SheetContent>
     </Sheet>

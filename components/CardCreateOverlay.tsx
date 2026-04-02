@@ -186,7 +186,6 @@ export default function CardCreateOverlay({
     return (
       <MDEditor.Markdown
         source={preparedSource}
-        wrapperElement={{ 'data-color-mode': 'light' }}
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
         components={{
@@ -405,10 +404,7 @@ export default function CardCreateOverlay({
     };
 
     return (
-      <div
-        data-color-mode="light"
-        className="card-editor-surface [&_.w-md-editor]:min-h-[260px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-border [&_.w-md-editor]:bg-muted [&_.w-md-editor]:text-card-foreground [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-input]:text-card-foreground [&_.w-md-editor-text-pre]:text-sm [&_.w-md-editor-text-pre]:text-card-foreground [&_.w-md-editor-text-container]:bg-muted [&_.wmde-markdown]:bg-muted [&_.wmde-markdown]:text-card-foreground"
-      >
+      <div className="card-editor-surface [&_.w-md-editor]:min-h-[260px] [&_.w-md-editor]:overflow-hidden [&_.w-md-editor]:rounded-xl [&_.w-md-editor]:border-border [&_.w-md-editor]:bg-muted [&_.w-md-editor]:text-card-foreground [&_.w-md-editor-text]:text-sm [&_.w-md-editor-text-input]:text-sm [&_.w-md-editor-text-input]:text-card-foreground [&_.w-md-editor-text-pre]:text-sm [&_.w-md-editor-text-pre]:text-card-foreground [&_.w-md-editor-text-container]:bg-muted [&_.wmde-markdown]:bg-muted [&_.wmde-markdown]:text-card-foreground">
         <MDEditor
           value={content}
           onChange={handleEditorChange}
@@ -463,8 +459,8 @@ export default function CardCreateOverlay({
   }, [mode]);
 
   const panelBody = (
-      <div className="relative">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div className="relative flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">New Card</div>
             <div className="text-lg font-semibold text-card-foreground">Create</div>
@@ -501,7 +497,8 @@ export default function CardCreateOverlay({
             </Button>
           </div>
         </div>
-          <div className="space-y-4 px-6 py-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+            <div className="space-y-4">
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -579,18 +576,19 @@ export default function CardCreateOverlay({
             </Button>
           </div>
         </div>
+        </div>
       </div>
   );
 
   const overlay = mode === 'modal' ? (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-0">
         {panelBody}
       </DialogContent>
     </Dialog>
   ) : (
     <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent side="right" className="w-full max-w-xl overflow-y-auto p-0">
+      <SheetContent side="right" className="w-full max-w-xl overflow-y-auto border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-0">
         {panelBody}
       </SheetContent>
     </Sheet>

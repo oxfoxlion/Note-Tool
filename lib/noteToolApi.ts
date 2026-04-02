@@ -295,6 +295,11 @@ export type Space = {
   created_at: string;
 };
 
+export type DeleteSpaceResult = {
+  deleted: Space;
+  next_default: Space | null;
+};
+
 export async function getSpaces(): Promise<Space[]> {
   const { data } = await api.get('/note_tool/space/', { headers: authHeaders() });
   return data;
@@ -312,7 +317,7 @@ export async function updateSpace(spaceId: number, payload: { name: string }) {
 
 export async function deleteSpace(spaceId: number) {
   const { data } = await api.delete(`/note_tool/space/${spaceId}`, { headers: authHeaders() });
-  return data as Space;
+  return data as DeleteSpaceResult;
 }
 
 export async function getCards(spaceId?: number | null): Promise<Card[]> {

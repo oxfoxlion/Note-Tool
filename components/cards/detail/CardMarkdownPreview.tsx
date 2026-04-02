@@ -50,7 +50,6 @@ export default function CardMarkdownPreview({ text, onToggleTaskAtIndex, onOpenC
   return (
     <MDEditor.Markdown
       source={preparedSource}
-      wrapperElement={{ 'data-color-mode': 'light' }}
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
       components={{
