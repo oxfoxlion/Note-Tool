@@ -352,15 +352,12 @@ body {
 .card-editor-surface .w-md-editor-text-pre,
 .card-editor-surface .w-md-editor-text {
   caret-color: var(--card-foreground) !important;
+  color: var(--card-foreground) !important;
+  -webkit-text-fill-color: var(--card-foreground) !important;
 }
 
 .card-editor-surface .w-md-editor-text-input::placeholder {
   color: var(--muted-foreground) !important;
-}
-
-.theme-dark .card-editor-surface .w-md-editor-text-input {
-  color: var(--card-foreground) !important;
-  -webkit-text-fill-color: var(--card-foreground) !important;
 }
 
 .theme-dark .card-editor-surface .w-md-editor-text-pre {

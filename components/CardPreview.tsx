@@ -1,12 +1,12 @@
-import type { ComponentProps } from 'react';
-import ReactMarkdown from 'react-markdown';
+import MDEditor from '@uiw/react-md-editor';
+import type { InputHTMLAttributes } from 'react';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
 import type { Card } from '../lib/noteToolApi';
 
-type MarkdownInputProps = ComponentProps<'input'>;
+type MarkdownInputProps = InputHTMLAttributes<HTMLInputElement>;
 
 type CardPreviewProps = {
   card: Card;
@@ -63,20 +63,26 @@ export default function CardPreview({
           }`}
         >
           {content ? (
-            <ReactMarkdown
+            <MDEditor.Markdown
+              source={prepareMarkdown(content)}
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
               components={{
-                input: ({ ...props }: MarkdownInputProps) =>
-                  props.type === 'checkbox' ? (
-                    <input type="checkbox" checked={Boolean(props.checked)} disabled readOnly />
-                  ) : (
-                    <input {...props} />
-                  ),
+                input: ({ ...props }: MarkdownInputProps) => {
+                  if (props.type !== 'checkbox') {
+                    return <input {...props} />;
+                  }
+                  return (
+                    <input
+                      type="checkbox"
+                      checked={Boolean(props.checked)}
+                      disabled
+                      readOnly
+                    />
+                  );
+                },
               }}
-            >
-              {prepareMarkdown(content)}
-            </ReactMarkdown>
+            />
           ) : (
             <p className="text-xs text-muted-foreground">No content yet.</p>
           )}
@@ -92,7 +98,7 @@ export default function CardPreview({
   if (!interactive) {
     return (
       <div
-        className={`w-full rounded-xl border border-border bg-card p-4 text-left text-card-foreground shadow-sm ${
+        className={`w-full rounded-xl border border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-4 text-left text-card-foreground shadow-sm ${
           fillHeight ? 'h-full' : ''
         }`}
       >
@@ -105,7 +111,7 @@ export default function CardPreview({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-xl border border-border bg-card p-4 text-left text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent/40 hover:shadow-md ${
+      className={`w-full rounded-xl border border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-4 text-left text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent/40 hover:shadow-md ${
         fillHeight ? 'h-full' : ''
       }`}
     >
