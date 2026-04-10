@@ -29,6 +29,7 @@ export default function GoogleCallbackClient() {
       const require2FA = searchParams.get('require_2fa') === '1';
       const userId = searchParams.get('user_id');
       const displayName = searchParams.get('display_name');
+      const callbackToken = searchParams.get('token');
 
       if (require2FA) {
         if (userId) {
@@ -42,15 +43,20 @@ export default function GoogleCallbackClient() {
       }
 
       try {
-        const response = await axios.post(
-          `${API_BASE}/note_tool/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
+        let token = callbackToken;
 
-        const token = response.data?.token;
+        // 優先使用 callback query token，避免跨站 refresh cookie 在部分環境無法即時帶上的問題。
         if (!token || typeof token !== 'string') {
-          throw new Error('Refresh token response missing token');
+          const response = await axios.post(
+            `${API_BASE}/note_tool/auth/refresh`,
+            {},
+            { withCredentials: true }
+          );
+          token = response.data?.token;
+        }
+
+        if (!token || typeof token !== 'string') {
+          throw new Error('Google callback missing token');
         }
 
         localStorage.setItem('note_tool_token', token);
