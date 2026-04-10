@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import { useRouter } from 'next/navigation';
 import MDEditor from '@uiw/react-md-editor';
@@ -11,6 +11,7 @@ import { markdownSanitizeSchema } from '../lib/markdownSanitize';
 import type { Card } from '../lib/noteToolApi';
 import { useCardShare } from '../hooks/useCardShare';
 import { useCardBoardMembership } from '../hooks/useCardBoardMembership';
+import { useCardLinks } from '../hooks/useCardLinks';
 import { useCurrentSpace } from '../hooks/useCurrentSpace';
 import CardActionsMenu from './cards/CardActionsMenu';
 import CardShareLinksModal from './cards/CardShareLinksModal';
@@ -35,6 +36,7 @@ type CardOverlayProps = {
   readOnly?: boolean;
   onNavigateCard?: (cardId: number) => void;
   breadcrumbRootLabel?: string;
+  boardLinkedCardIds?: number[];
 };
 
 type MarkdownInputProps = InputHTMLAttributes<HTMLInputElement> & {
@@ -59,6 +61,7 @@ export default function CardOverlay({
   readOnly = false,
   onNavigateCard,
   breadcrumbRootLabel = 'Card Box',
+  boardLinkedCardIds = [],
 }: CardOverlayProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'view' | 'edit'>('view');
@@ -160,37 +163,12 @@ export default function CardOverlay({
     };
   }, [title, content, viewMode, onSave, readOnly]);
 
-  const cardMap = useMemo(() => {
-    const map = new Map<number, Card>();
-    allCards.forEach((item) => map.set(item.id, item));
-    return map;
-  }, [allCards]);
-
-  const mentionedIds = useMemo(() => {
-    const ids = new Set<number>();
-    const regex = /@\[\[(\d+)\|[^\]]+\]\]/g;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(content))) {
-      ids.add(Number(match[1]));
-    }
-    return Array.from(ids);
-  }, [content]);
-
-  const incomingIds = useMemo(() => {
-    const ids = new Set<number>();
-    const regex = new RegExp(`@\\[\\[${card.id}\\|[^\\]]+\\]\\]`, 'g');
-    allCards.forEach((item) => {
-      if (item.id === card.id || !item.content) return;
-      if (regex.test(item.content)) {
-        ids.add(item.id);
-      }
-    });
-    return Array.from(ids);
-  }, [allCards, card.id]);
-
-  const linkedCards = Array.from(new Set([...mentionedIds, ...incomingIds]))
-    .map((id) => cardMap.get(id))
-    .filter((item): item is Card => Boolean(item));
+  const linkedCards = useCardLinks({
+    allCards,
+    content,
+    cardId: card.id,
+    additionalLinkedIds: boardLinkedCardIds,
+  });
 
   const prepareMarkdown = (text: string) =>
     text.replace(/@\[\[(\d+)\|([^\]]+)\]\]/g, '[@$2](/cards/$1)');

@@ -226,6 +226,18 @@ export type BoardRegion = {
   updated_at: string;
 };
 
+export type BoardCardLinkHandle = 'top' | 'right' | 'bottom' | 'left';
+
+export type BoardCardLink = {
+  id: number;
+  board_id: number;
+  source_card_id: number;
+  target_card_id: number;
+  source_handle: BoardCardLinkHandle;
+  target_handle: BoardCardLinkHandle;
+  created_at: string;
+};
+
 export type BoardShareLink = {
   id: number;
   board_id: number;
@@ -260,6 +272,7 @@ export type SharedBoardPayload = {
   board: Board;
   cards: Card[];
   regions: BoardRegion[];
+  links?: BoardCardLink[];
   share: {
     permission: 'read' | 'edit';
     expires_at: string | null;
@@ -451,7 +464,7 @@ export async function copyBoardToSpace(boardId: number, spaceId: number) {
 
 export async function getBoard(boardId: number) {
   const { data } = await api.get(`/note_tool/board/${boardId}`, { headers: authHeaders() });
-  return data as { board: Board; cards: Card[] };
+  return data as { board: Board; cards: Card[]; links?: BoardCardLink[] };
 }
 
 export async function createCardInBoard(boardId: number, payload: { title: string; content?: string }) {
@@ -479,6 +492,30 @@ export async function addExistingCardToBoard(boardId: number, cardId: number) {
 
 export async function removeCardFromBoard(boardId: number, cardId: number) {
   await api.delete(`/note_tool/board/${boardId}/cards/${cardId}`, { headers: authHeaders() });
+}
+
+export async function getBoardCardLinks(boardId: number): Promise<BoardCardLink[]> {
+  const { data } = await api.get(`/note_tool/board/${boardId}/card-links`, { headers: authHeaders() });
+  return data;
+}
+
+export async function createBoardCardLink(
+  boardId: number,
+  payload: {
+    source_card_id: number;
+    target_card_id: number;
+    source_handle: BoardCardLinkHandle;
+    target_handle: BoardCardLinkHandle;
+  }
+) {
+  const { data } = await api.post(`/note_tool/board/${boardId}/card-links`, payload, {
+    headers: authHeaders(),
+  });
+  return data as BoardCardLink;
+}
+
+export async function deleteBoardCardLink(boardId: number, linkId: number) {
+  await api.delete(`/note_tool/board/${boardId}/card-links/${linkId}`, { headers: authHeaders() });
 }
 
 export async function getBoardRegions(boardId: number): Promise<BoardRegion[]> {

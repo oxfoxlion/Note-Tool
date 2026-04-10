@@ -7,9 +7,10 @@ type UseCardLinksParams = {
   allCards: Card[];
   content: string;
   cardId?: number;
+  additionalLinkedIds?: number[];
 };
 
-export function useCardLinks({ allCards, content, cardId }: UseCardLinksParams) {
+export function useCardLinks({ allCards, content, cardId, additionalLinkedIds = [] }: UseCardLinksParams) {
   const cardMap = useMemo(() => {
     const map = new Map<number, Card>();
     allCards.forEach((item) => map.set(item.id, item));
@@ -39,7 +40,7 @@ export function useCardLinks({ allCards, content, cardId }: UseCardLinksParams) 
     return Array.from(ids);
   }, [allCards, cardId]);
 
-  return Array.from(new Set([...mentionedIds, ...incomingIds]))
+  return Array.from(new Set([...mentionedIds, ...incomingIds, ...additionalLinkedIds]))
     .map((id) => cardMap.get(id))
     .filter((item): item is Card => Boolean(item));
 }

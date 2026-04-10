@@ -7,14 +7,18 @@ import CardCreateOverlay from '../../../../components/CardCreateOverlay';
 import CardPreview from '../../../../components/CardPreview';
 import {
   addExistingCardToBoard,
+  BoardCardLink,
+  BoardCardLinkHandle,
   BoardShareLink,
   Board,
   BoardRegion as ApiBoardRegion,
   Card,
   copyBoardToSpace,
+  createBoardCardLink,
   createBoardRegion,
   createBoardShareLink,
   createCardInBoard,
+  deleteBoardCardLink,
   deleteBoardRegion,
   deleteBoard,
   deleteCard,
@@ -72,6 +76,13 @@ type DraftRegion = {
   y: number;
   width: number;
   height: number;
+};
+
+type LinkDraft = {
+  sourceCardId: number;
+  sourceHandle: BoardCardLinkHandle;
+  pointerX: number;
+  pointerY: number;
 };
 
 const DEFAULT_REGION_COLOR = '#38bdf8';
@@ -139,14 +150,7 @@ export default function BoardDetailPage() {
   const [importQuery, setImportQuery] = useState('');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
-  const [showToolbar, setShowToolbar] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return window.localStorage.getItem(toolbarStorageKey) === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [showToolbar, setShowToolbar] = useState<boolean>(false);
   const [showBoardMenu, setShowBoardMenu] = useState(false);
   const [showRename, setShowRename] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -167,6 +171,10 @@ export default function BoardDetailPage() {
   const [copyError, setCopyError] = useState('');
   const [copySuccessMessage, setCopySuccessMessage] = useState('');
   const [regions, setRegions] = useState<BoardRegionView[]>([]);
+  const [boardLinks, setBoardLinks] = useState<BoardCardLink[]>([]);
+  const [linkDraft, setLinkDraft] = useState<LinkDraft | null>(null);
+  const [hoveredCardId, setHoveredCardId] = useState<number | null>(null);
+  const [hoveredLinkId, setHoveredLinkId] = useState<number | null>(null);
   const [draftRegion, setDraftRegion] = useState<DraftRegion | null>(null);
   const [showRegionName, setShowRegionName] = useState(false);
   const [regionNameValue, setRegionNameValue] = useState('');
@@ -245,6 +253,7 @@ export default function BoardDetailPage() {
     moved: false,
     target: null,
   });
+  const suppressNextStageClickRef = useRef(false);
 
   const mapApiRegionToView = (region: ApiBoardRegion): BoardRegionView => ({
     id: region.id,
@@ -268,6 +277,14 @@ export default function BoardDetailPage() {
     media.addEventListener('change', handleChange);
     return () => media.removeEventListener('change', handleChange);
   }, []);
+
+  useEffect(() => {
+    try {
+      setShowToolbar(window.localStorage.getItem(toolbarStorageKey) === '1');
+    } catch {
+      // Ignore storage errors in strict browser contexts
+    }
+  }, [toolbarStorageKey]);
 
   useEffect(() => {
     try {
@@ -308,6 +325,7 @@ export default function BoardDetailPage() {
           setCardOpenMode(settingsData.cardOpenMode);
         }
         setRegions(regionsData.map(mapApiRegionToView));
+        setBoardLinks(boardData.links ?? []);
       } catch (err: unknown) {
         if (isUnauthorizedError(err)) {
           router.push('/auth/login');
@@ -340,6 +358,48 @@ export default function BoardDetailPage() {
       return haystack.includes(keyword);
     });
   }, [allCards, cards, importQuery]);
+
+  const getCardAnchorPoint = useCallback(
+    (cardId: number, handle: BoardCardLinkHandle) => {
+      const pos = positions[cardId] ?? { x: 0, y: 0, width: null };
+      const width = pos.width ?? defaultCardWidth;
+      const height = cardRefs.current[cardId]?.offsetHeight ?? 220;
+      const centerX = pos.x + width / 2;
+      const centerY = pos.y + height / 2;
+      if (handle === 'top') return { x: centerX, y: pos.y };
+      if (handle === 'right') return { x: pos.x + width, y: centerY };
+      if (handle === 'bottom') return { x: centerX, y: pos.y + height };
+      return { x: pos.x, y: centerY };
+    },
+    [positions]
+  );
+
+  const getNearestHandleForCard = useCallback(
+    (cardId: number, worldX: number, worldY: number): BoardCardLinkHandle => {
+      const handles: BoardCardLinkHandle[] = ['top', 'right', 'bottom', 'left'];
+      let nearest: BoardCardLinkHandle = 'right';
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      handles.forEach((handle) => {
+        const point = getCardAnchorPoint(cardId, handle);
+        const dx = point.x - worldX;
+        const dy = point.y - worldY;
+        const distance = dx * dx + dy * dy;
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = handle;
+        }
+      });
+      return nearest;
+    },
+    [getCardAnchorPoint]
+  );
+
+  const visibleBoardLinks = useMemo(() => {
+    const cardIdSet = new Set(cards.map((item) => item.id));
+    return boardLinks.filter(
+      (link) => cardIdSet.has(link.source_card_id) && cardIdSet.has(link.target_card_id)
+    );
+  }, [boardLinks, cards]);
 
   const handleCreate = async (payload: { title: string; content: string }) => {
     setError('');
@@ -417,6 +477,11 @@ export default function BoardDetailPage() {
     const normalizedCardId = Number(targetCardId);
     if (normalizedBoardId === normalizedCurrentBoardId) {
       setCards((prev) => prev.filter((item) => Number(item.id) !== normalizedCardId));
+      setBoardLinks((prev) =>
+        prev.filter(
+          (link) => link.source_card_id !== normalizedCardId && link.target_card_id !== normalizedCardId
+        )
+      );
       setPositions((prev) => {
         const next = { ...prev };
         delete next[normalizedCardId];
@@ -431,6 +496,11 @@ export default function BoardDetailPage() {
     await deleteCard(selectedCard.id);
     setCards((prev) => prev.filter((item) => item.id !== selectedCard.id));
     setAllCards((prev) => prev.filter((item) => item.id !== selectedCard.id));
+    setBoardLinks((prev) =>
+      prev.filter(
+        (link) => link.source_card_id !== selectedCard.id && link.target_card_id !== selectedCard.id
+      )
+    );
     setPositions((prev) => {
       const next = { ...prev };
       delete next[selectedCard.id];
@@ -438,6 +508,63 @@ export default function BoardDetailPage() {
     });
     setSelectedCard(null);
   };
+
+  const handleCreateBoardLink = useCallback(
+    async (
+      sourceCardId: number,
+      targetCardId: number,
+      sourceHandle: BoardCardLinkHandle,
+      targetHandle: BoardCardLinkHandle
+    ) => {
+      try {
+        const created = await createBoardCardLink(boardId, {
+          source_card_id: sourceCardId,
+          target_card_id: targetCardId,
+          source_handle: sourceHandle,
+          target_handle: targetHandle,
+        });
+        setBoardLinks((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === created.id);
+          if (existingIndex >= 0) {
+            const next = [...prev];
+            next[existingIndex] = created;
+            return next;
+          }
+          return [...prev, created];
+        });
+        suppressNextStageClickRef.current = true;
+      } catch {
+        setError('Failed to save card link.');
+      }
+    },
+    [boardId]
+  );
+
+  const handleDeleteBoardLink = useCallback(
+    async (linkId: number) => {
+      try {
+        await deleteBoardCardLink(boardId, linkId);
+        setBoardLinks((prev) => prev.filter((item) => item.id !== linkId));
+      } catch {
+        setError('Failed to delete card link.');
+      }
+    },
+    [boardId]
+  );
+
+  const handleStartLinkDraft = useCallback(
+    (cardId: number, handle: BoardCardLinkHandle) => {
+      const point = getCardAnchorPoint(cardId, handle);
+      suppressNextStageClickRef.current = true;
+      setLinkDraft({
+        sourceCardId: cardId,
+        sourceHandle: handle,
+        pointerX: point.x,
+        pointerY: point.y,
+      });
+    },
+    [getCardAnchorPoint]
+  );
 
   const openLinkedCardInContext = useCallback(
     async (targetCardId: number) => {
@@ -527,6 +654,26 @@ export default function BoardDetailPage() {
   useEffect(() => {
     viewportRef.current = viewport;
   }, [viewport]);
+
+  useEffect(() => {
+    if (!linkDraft) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = stageRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const worldX = (event.clientX - rect.left - viewportRef.current.x) / viewportRef.current.scale;
+      const worldY = (event.clientY - rect.top - viewportRef.current.y) / viewportRef.current.scale;
+      setLinkDraft((prev) => (prev ? { ...prev, pointerX: worldX, pointerY: worldY } : prev));
+    };
+    const handlePointerUp = () => {
+      setLinkDraft(null);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [linkDraft]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -741,6 +888,12 @@ export default function BoardDetailPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (tool !== 'add' && linkDraft) {
+      setLinkDraft(null);
+    }
+  }, [tool, linkDraft]);
 
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button === 1) {
@@ -1156,6 +1309,19 @@ export default function BoardDetailPage() {
     const nextY = rect.height / 2 - cardCenterY * scale;
     setViewport({ x: nextX, y: nextY, scale });
   };
+
+  const selectedBoardLinkedCardIds = useMemo(() => {
+    if (!selectedCard) return [];
+    const linked = new Set<number>();
+    visibleBoardLinks.forEach((link) => {
+      if (link.source_card_id === selectedCard.id) {
+        linked.add(link.target_card_id);
+      } else if (link.target_card_id === selectedCard.id) {
+        linked.add(link.source_card_id);
+      }
+    });
+    return Array.from(linked);
+  }, [selectedCard, visibleBoardLinks]);
 
   const handleRenameBoard = async () => {
     if (!renameValue.trim()) {
@@ -1649,6 +1815,10 @@ export default function BoardDetailPage() {
             endPan(event);
           }}
           onClick={(event) => {
+            if (suppressNextStageClickRef.current) {
+              suppressNextStageClickRef.current = false;
+              return;
+            }
             if (tool !== 'add') return;
             const target = event.target as HTMLElement;
             if (target.closest('[data-card="true"]')) return;
@@ -1771,12 +1941,72 @@ export default function BoardDetailPage() {
                 }}
               />
             )}
+            <svg
+              className="absolute left-0 top-0 overflow-visible"
+              width="1"
+              height="1"
+              aria-hidden="true"
+            >
+              {visibleBoardLinks.map((link) => {
+                const sourcePoint = getCardAnchorPoint(link.source_card_id, link.source_handle);
+                const targetPoint = getCardAnchorPoint(link.target_card_id, link.target_handle);
+                const isHovered = hoveredLinkId === link.id;
+                return (
+                  <g key={link.id}>
+                    <line
+                      x1={sourcePoint.x}
+                      y1={sourcePoint.y}
+                      x2={targetPoint.x}
+                      y2={targetPoint.y}
+                      className="pointer-events-none"
+                      stroke={isHovered ? '#4b5563' : '#6b7280'}
+                      strokeOpacity="0.98"
+                      strokeWidth={isHovered ? '2.8' : '2.2'}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <line
+                      x1={sourcePoint.x}
+                      y1={sourcePoint.y}
+                      x2={targetPoint.x}
+                      y2={targetPoint.y}
+                      stroke="transparent"
+                      strokeWidth="14"
+                      className="pointer-events-auto cursor-pointer"
+                      onPointerEnter={() => setHoveredLinkId(link.id)}
+                      onPointerLeave={() => setHoveredLinkId((prev) => (prev === link.id ? null : prev))}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        suppressNextStageClickRef.current = true;
+                        void handleDeleteBoardLink(link.id);
+                      }}
+                    />
+                  </g>
+                );
+              })}
+              {linkDraft && (
+                <line
+                  x1={getCardAnchorPoint(linkDraft.sourceCardId, linkDraft.sourceHandle).x}
+                  y1={getCardAnchorPoint(linkDraft.sourceCardId, linkDraft.sourceHandle).y}
+                  x2={linkDraft.pointerX}
+                  y2={linkDraft.pointerY}
+                  className="pointer-events-none"
+                  stroke="#9ca3af"
+                  strokeOpacity="0.95"
+                  strokeDasharray="4 4"
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+            </svg>
             {cards.map((card) => {
               const pos = positions[card.id] || { x: 0, y: 0 };
               return (
                 <div
                   key={card.id}
                   data-card="true"
+                  onMouseEnter={() => setHoveredCardId(card.id)}
+                  onMouseLeave={() => setHoveredCardId((prev) => (prev === card.id ? null : prev))}
                   onWheel={(event) => {
                     if (event.shiftKey) {
                       event.stopPropagation();
@@ -1784,7 +2014,34 @@ export default function BoardDetailPage() {
                   }}
                   onPointerDown={(event) => beginDrag(event, card.id)}
                   onPointerMove={moveDrag}
-                  onPointerUp={endDrag}
+                  onPointerUp={(event) => {
+                    if (linkDraft && tool === 'add') {
+                      event.stopPropagation();
+                      if (linkDraft.sourceCardId === card.id) {
+                        setLinkDraft(null);
+                        suppressNextStageClickRef.current = true;
+                        return;
+                      }
+                      const rect = stageRef.current?.getBoundingClientRect();
+                      if (!rect) {
+                        setLinkDraft(null);
+                        return;
+                      }
+                      const worldX = (event.clientX - rect.left - viewport.x) / viewport.scale;
+                      const worldY = (event.clientY - rect.top - viewport.y) / viewport.scale;
+                      const targetHandle = getNearestHandleForCard(card.id, worldX, worldY);
+                      void handleCreateBoardLink(
+                        linkDraft.sourceCardId,
+                        card.id,
+                        linkDraft.sourceHandle,
+                        targetHandle
+                      );
+                      setLinkDraft(null);
+                      suppressNextStageClickRef.current = true;
+                      return;
+                    }
+                    endDrag(event);
+                  }}
                   onPointerCancel={endDrag}
                   onDoubleClick={() => {
                     if (isMobile) {
@@ -1811,6 +2068,51 @@ export default function BoardDetailPage() {
                       fillHeight={false}
                       onSelect={() => {}}
                     />
+                    {(['top', 'right', 'bottom', 'left'] as BoardCardLinkHandle[]).map((handle) => {
+                      const anchorClass =
+                        handle === 'top'
+                          ? 'left-1/2 top-0 -translate-x-1/2 -translate-y-1/2'
+                          : handle === 'right'
+                            ? 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2'
+                            : handle === 'bottom'
+                              ? 'left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2'
+                              : 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2';
+                      return (
+                        <button
+                          key={`${card.id}-${handle}`}
+                          type="button"
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            if (tool !== 'add') return;
+                            handleStartLinkDraft(card.id, handle);
+                          }}
+                          onPointerUp={(event) => {
+                            event.stopPropagation();
+                            if (!linkDraft || tool !== 'add') return;
+                            if (linkDraft.sourceCardId === card.id) {
+                              setLinkDraft(null);
+                              suppressNextStageClickRef.current = true;
+                              return;
+                            }
+                            void handleCreateBoardLink(
+                              linkDraft.sourceCardId,
+                              card.id,
+                              linkDraft.sourceHandle,
+                              handle
+                            );
+                            setLinkDraft(null);
+                            suppressNextStageClickRef.current = true;
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            suppressNextStageClickRef.current = true;
+                          }}
+                          className={`absolute z-10 h-4 w-4 rounded-full border border-[#6b7280] bg-[#d1d5db] shadow-sm transition dark:border-[#d1d5db] dark:bg-[#6b7280] ${anchorClass} ${tool === 'add' && (hoveredCardId === card.id || linkDraft) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                          aria-label={`Link from ${handle}`}
+                          title={`Link from ${handle}`}
+                        />
+                      );
+                    })}
                     <button
                       type="button"
                       onPointerDown={(event) => event.stopPropagation()}
@@ -1859,6 +2161,7 @@ export default function BoardDetailPage() {
           allCards={allCards}
           onNavigateCard={handleNavigateOverlayCard}
           breadcrumbRootLabel={boardName || 'Board'}
+          boardLinkedCardIds={selectedBoardLinkedCardIds}
         />
       )}
 
