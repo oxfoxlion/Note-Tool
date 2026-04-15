@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardPreview from '../../../components/CardPreview';
@@ -144,6 +144,19 @@ export default function SharedBoardPage() {
       (link) => cardIdSet.has(link.source_card_id) && cardIdSet.has(link.target_card_id)
     );
   })();
+
+  const selectedBoardLinkedCardIds = useMemo(() => {
+    if (!selectedCard) return [];
+    const linked = new Set<number>();
+    visibleBoardLinks.forEach((link) => {
+      if (link.source_card_id === selectedCard.id) {
+        linked.add(link.target_card_id);
+      } else if (link.target_card_id === selectedCard.id) {
+        linked.add(link.source_card_id);
+      }
+    });
+    return Array.from(linked);
+  }, [selectedCard, visibleBoardLinks]);
 
   const handleCardContentClick = (event: React.MouseEvent<HTMLElement>, fallbackCardId: number) => {
     const target = event.target as HTMLElement | null;
@@ -535,6 +548,7 @@ export default function SharedBoardPage() {
             readOnly
             onNavigateCard={openCardById}
             breadcrumbRootLabel={boardName || 'Shared Board'}
+            boardLinkedCardIds={selectedBoardLinkedCardIds}
           />
         )}
       </div>
