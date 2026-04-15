@@ -20,7 +20,7 @@ import CardCopyToSpaceModal from './cards/CardCopyToSpaceModal';
 import { copyCardToSpace, getSpaces, Space } from '../lib/noteToolApi';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Button } from './ui/button';
-import { Dialog, DialogContent } from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Sheet, SheetContent } from './ui/sheet';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
@@ -893,6 +893,10 @@ export default function CardOverlay({
   const overlay = mode === 'modal' ? (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-0">
+        <DialogTitle className="sr-only">Card details</DialogTitle>
+        <DialogDescription className="sr-only">
+          View and edit card content in modal.
+        </DialogDescription>
         {panelBody}
       </DialogContent>
     </Dialog>

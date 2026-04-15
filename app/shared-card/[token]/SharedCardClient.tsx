@@ -2,15 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import MDEditor from '@uiw/react-md-editor';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
-import { markdownSanitizeSchema } from '../../../lib/markdownSanitize';
 import { Card, getSharedCardByToken } from '../../../lib/noteToolApi';
 import StatusPage from '../../../components/StatusPage';
 import { Card as UiCard, CardContent } from '../../../components/ui/card';
 import ThemeToggle from '../../../components/theme/ThemeToggle';
+import CardMarkdownPreview from '../../../components/cards/detail/CardMarkdownPreview';
 
 type SharedCardClientProps = {
   token: string;
@@ -87,17 +83,13 @@ export default function SharedCardClient({ token }: SharedCardClientProps) {
   return (
     <div className="min-h-screen bg-background px-4 py-8 md:px-8 md:py-12">
       <ThemeToggle className="fixed right-4 top-4 rounded-full" />
-      <UiCard className="mx-auto w-full max-w-4xl rounded-2xl border-border bg-card shadow-sm">
+      <UiCard className="mx-auto w-full max-w-4xl rounded-2xl border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] shadow-sm">
         <CardContent className="p-6 md:p-10">
-        <div className="mb-6 text-xs uppercase tracking-[0.2em] text-muted-foreground">Shared card</div>
-        <h1 className="text-2xl font-semibold text-card-foreground md:text-3xl">{card.title || 'Untitled'}</h1>
-        <article className="card-preview-surface prose mt-8 max-w-none text-sm leading-relaxed text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground">
-          <MDEditor.Markdown
-            source={card.content || 'No content yet.'}
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
-          />
-        </article>
+          <div className="mb-6 text-xs uppercase tracking-[0.2em] text-muted-foreground">Shared card</div>
+          <h1 className="text-2xl font-semibold text-card-foreground md:text-3xl">{card.title || 'Untitled'}</h1>
+          <article className="card-preview-surface prose mt-8 max-w-none overflow-x-auto overflow-y-auto text-sm leading-relaxed text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground">
+            <CardMarkdownPreview text={card.content || 'No content yet.'} onToggleTaskAtIndex={() => {}} />
+          </article>
         </CardContent>
       </UiCard>
     </div>

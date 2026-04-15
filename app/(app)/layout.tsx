@@ -167,6 +167,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const [renameFolderError, setRenameFolderError] = useState('');
   const [deletingFolder, setDeletingFolder] = useState<BoardFolder | null>(null);
   const lastFolderMutationRef = useRef(0);
+  const lastSpaceRouteRef = useRef<{ at: number; href: string; spaceId: number } | null>(null);
   const selectedFolderId = Number(searchParams.get('folderId'));
   const hasSelectedFolder = pathname === '/boards' && Number.isInteger(selectedFolderId) && selectedFolderId > 0;
   const currentFolders = currentSpaceId ? foldersBySpace[currentSpaceId] ?? [] : [];
@@ -228,7 +229,36 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     }));
   };
 
-  const handleSelectSpaceRoute = (spaceId: number, href: string) => {
+  const handleSelectSpaceRoute = (spaceId: number, href: string, source: string) => {
+    const now = Date.now();
+    const lastRoute = lastSpaceRouteRef.current;
+    const isDev = process.env.NODE_ENV !== 'production';
+    const shouldIgnoreLikelyDuplicateToCardBox =
+      isDev &&
+      href === '/cards' &&
+      pathname !== '/cards' &&
+      Boolean(lastRoute) &&
+      now - (lastRoute?.at ?? 0) < 1400 &&
+      (lastRoute?.href ?? '') !== '/cards';
+
+    if (shouldIgnoreLikelyDuplicateToCardBox) {
+      if (isDev) {
+        console.debug('[layout] ignored likely duplicate /cards navigation', {
+          source,
+          pathname,
+          spaceId,
+          lastRoute,
+        });
+      }
+      return;
+    }
+
+    lastSpaceRouteRef.current = { at: now, href, spaceId };
+
+    if (isDev) {
+      console.debug('[layout] navigate by space route', { source, pathname, href, spaceId });
+    }
+
     setCurrentSpaceId(spaceId);
     setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
     setOpenSpaceMenuId(null);
@@ -663,7 +693,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSelectSpaceRoute(space.id, '/boards')}
+                          onClick={() => handleSelectSpaceRoute(space.id, '/boards', 'space-name')}
                           className="min-w-0 flex-1 text-left"
                           title={space.name}
                         >
@@ -740,7 +770,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                       <div className="mt-1 space-y-1 pl-6 pr-1">
                         <button
                           type="button"
-                          onClick={() => handleSelectSpaceRoute(space.id, '/cards')}
+                          onClick={() => handleSelectSpaceRoute(space.id, '/cards', 'card-box')}
                           className="flex w-full items-center rounded-md px-3 py-1.5 text-left text-xs transition"
                           style={{
                             background:
@@ -762,7 +792,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                                 draggable={false}
                                 onClick={() => {
                                   setOpenFolderMenuId(null);
-                                  handleSelectSpaceRoute(space.id, `/boards?folderId=${folder.id}`);
+                                  handleSelectSpaceRoute(space.id, `/boards?folderId=${folder.id}`, 'folder');
                                 }}
                                 className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-xs transition"
                                 style={{

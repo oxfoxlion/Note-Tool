@@ -13,9 +13,12 @@ import { Badge } from '../../../components/ui/badge';
 import {
   Card,
   Board,
+  BoardCardLink,
   createCard,
   deleteCard,
   getBoard,
+  getBoardCardLinks,
+  getCardBoards,
   getBoards,
   getCards,
   getUserSettings,
@@ -37,6 +40,7 @@ export default function CardsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedBoardLinkedCardIds, setSelectedBoardLinkedCardIds] = useState<number[]>([]);
   const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
   const [boardFilter, setBoardFilter] = useState<string>('');
   const [error, setError] = useState('');
@@ -190,6 +194,44 @@ export default function CardsPage() {
     },
     [allCards, cards, router]
   );
+
+  useEffect(() => {
+    if (!selectedCard) return;
+    let active = true;
+    const loadBoardLinks = async () => {
+      try {
+        const memberships = await getCardBoards(selectedCard.id);
+        const linkGroups = await Promise.all(
+          memberships.map(async (board) => {
+            const links = await getBoardCardLinks(board.id);
+            return links;
+          })
+        );
+        if (!active) return;
+        const merged = linkGroups.flat();
+        const linked = new Set<number>();
+        merged.forEach((link: BoardCardLink) => {
+          if (link.source_card_id === selectedCard.id) {
+            linked.add(link.target_card_id);
+          } else if (link.target_card_id === selectedCard.id) {
+            linked.add(link.source_card_id);
+          }
+        });
+        setSelectedBoardLinkedCardIds(Array.from(linked));
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+          router.push('/auth/login');
+          return;
+        }
+        if (!active) return;
+        setSelectedBoardLinkedCardIds([]);
+      }
+    };
+    void loadBoardLinks();
+    return () => {
+      active = false;
+    };
+  }, [selectedCard, router]);
 
   return (
     <div className="space-y-8">
@@ -349,7 +391,10 @@ export default function CardsPage() {
         <CardOverlay
           card={selectedCard}
           mode={cardOpenMode}
-          onClose={() => setSelectedCard(null)}
+          onClose={() => {
+            setSelectedCard(null);
+            setSelectedBoardLinkedCardIds([]);
+          }}
           onSave={handleSave}
           onDelete={handleDelete}
           onRemoveFromBoard={async (targetBoardId, targetCardId) => {
@@ -357,6 +402,7 @@ export default function CardsPage() {
           }}
           allCards={allCards}
           onNavigateCard={handleNavigateOverlayCard}
+          boardLinkedCardIds={selectedBoardLinkedCardIds}
         />
       )}
 

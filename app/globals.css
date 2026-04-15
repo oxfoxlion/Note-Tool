@@ -25,6 +25,11 @@
   --scrollbar-track: rgba(226, 232, 240, 0.55);
   --scrollbar-thumb: rgba(100, 116, 139, 0.42);
   --scrollbar-thumb-hover: rgba(71, 85, 105, 0.58);
+  --code-block-bg: #0f172a;
+  --code-block-fg: #e2e8f0;
+  --code-token-function: #7dd3fc;
+  --code-token-variable: #fca5a5;
+  --code-token-string: #86efac;
   --radius: 0.75rem;
 }
 
@@ -295,8 +300,8 @@ body {
 }
 
 .prose pre {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--code-block-bg);
+  color: var(--code-block-fg);
   padding: 0.75rem 0.9rem;
   border-radius: 0.75rem;
   overflow: auto;
@@ -313,13 +318,33 @@ body {
 
 /* Force dark code blocks in @uiw markdown preview */
 .wmde-markdown pre {
-  background: #0f172a !important;
-  color: #e2e8f0 !important;
+  background: var(--code-block-bg) !important;
+  color: var(--code-block-fg) !important;
 }
 
 .wmde-markdown pre code {
   background: transparent !important;
   color: inherit !important;
+}
+
+/* Keep syntax token colors consistent between light/dark themes */
+.wmde-markdown pre code .token.function,
+.wmde-markdown pre code .token.method,
+.wmde-markdown pre code .hljs-function .hljs-title,
+.wmde-markdown pre code .hljs-title.function_,
+.wmde-markdown pre code .hljs-title.function {
+  color: var(--code-token-function) !important;
+}
+
+.wmde-markdown pre code .token.variable,
+.wmde-markdown pre code .hljs-variable,
+.wmde-markdown pre code .hljs-attr {
+  color: var(--code-token-variable) !important;
+}
+
+.wmde-markdown pre code .token.string,
+.wmde-markdown pre code .hljs-string {
+  color: var(--code-token-string) !important;
 }
 
 .card-editor-surface .w-md-editor,
@@ -404,12 +429,10 @@ body {
   color: var(--card-foreground) !important;
 }
 
-.card-preview-surface .wmde-markdown *,
 .card-preview-surface .wmde-markdown section,
 .card-preview-surface .wmde-markdown article,
 .card-preview-surface .wmde-markdown div,
 .card-preview-surface .wmde-markdown p,
-.card-preview-surface .wmde-markdown span,
 .card-preview-surface .wmde-markdown li,
 .card-preview-surface .wmde-markdown td,
 .card-preview-surface .wmde-markdown th {

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardPreview from '../../../components/CardPreview';
 import StatusPage from '../../../components/StatusPage';
-import { Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
+import { BoardCardLink, BoardCardLinkHandle, Card, getSharedBoardByToken } from '../../../lib/noteToolApi';
 import { Button } from '../../../components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import ThemeToggle from '../../../components/theme/ThemeToggle';
@@ -43,6 +43,7 @@ export default function SharedBoardPage() {
   const modeStorageKey = 'note_tool_shared_card_open_mode';
   const [boardName, setBoardName] = useState('');
   const [cards, setCards] = useState<Card[]>([]);
+  const [boardLinks, setBoardLinks] = useState<BoardCardLink[]>([]);
   const [regions, setRegions] = useState<RegionView[]>([]);
   const [errorKind, setErrorKind] = useState<'not_found' | 'expired' | 'unknown' | ''>('');
   const [loading, setLoading] = useState(true);
@@ -51,6 +52,7 @@ export default function SharedBoardPage() {
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
   const viewportRef = useRef(viewport);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const gestureRef = useRef<{
     mode: 'none' | 'pan' | 'pinch';
@@ -69,6 +71,7 @@ export default function SharedBoardPage() {
     startScale: 1,
     startDist: null,
   });
+  const defaultCardWidth = 420;
 
   useEffect(() => {
     viewportRef.current = viewport;
@@ -120,6 +123,27 @@ export default function SharedBoardPage() {
       setSelectedCard(target);
     }
   };
+
+  const getCardAnchorPoint = (cardId: number, handle: BoardCardLinkHandle) => {
+    const card = cards.find((item) => item.id === cardId);
+    const x = typeof card?.x_pos === 'number' ? card.x_pos : 0;
+    const y = typeof card?.y_pos === 'number' ? card.y_pos : 0;
+    const width = typeof card?.width === 'number' ? card.width : defaultCardWidth;
+    const height = cardRefs.current[cardId]?.offsetHeight ?? 220;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    if (handle === 'top') return { x: centerX, y };
+    if (handle === 'right') return { x: x + width, y: centerY };
+    if (handle === 'bottom') return { x: centerX, y: y + height };
+    return { x, y: centerY };
+  };
+
+  const visibleBoardLinks = (() => {
+    const cardIdSet = new Set(cards.map((item) => item.id));
+    return boardLinks.filter(
+      (link) => cardIdSet.has(link.source_card_id) && cardIdSet.has(link.target_card_id)
+    );
+  })();
 
   const handleCardContentClick = (event: React.MouseEvent<HTMLElement>, fallbackCardId: number) => {
     const target = event.target as HTMLElement | null;
@@ -271,6 +295,7 @@ export default function SharedBoardPage() {
         const data = await getSharedBoardByToken(token);
         setBoardName(data.board.name);
         setCards(data.cards);
+        setBoardLinks(data.links ?? []);
         setRegions(
           data.regions.map((region) => ({
             id: region.id,
@@ -452,12 +477,39 @@ export default function SharedBoardPage() {
                 </div>
               </div>
             ))}
+            <svg
+              className="pointer-events-none absolute left-0 top-0 overflow-visible"
+              width="1"
+              height="1"
+              aria-hidden="true"
+            >
+              {visibleBoardLinks.map((link) => {
+                const sourcePoint = getCardAnchorPoint(link.source_card_id, link.source_handle);
+                const targetPoint = getCardAnchorPoint(link.target_card_id, link.target_handle);
+                return (
+                  <line
+                    key={link.id}
+                    x1={sourcePoint.x}
+                    y1={sourcePoint.y}
+                    x2={targetPoint.x}
+                    y2={targetPoint.y}
+                    stroke="#6b7280"
+                    strokeOpacity="0.98"
+                    strokeWidth="2.2"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
+            </svg>
             {cards.map((card) => {
               const x = typeof card.x_pos === 'number' ? card.x_pos : 0;
               const y = typeof card.y_pos === 'number' ? card.y_pos : 0;
               return (
                 <div
                   key={card.id}
+                  ref={(node) => {
+                    cardRefs.current[card.id] = node;
+                  }}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => handleCardContentClick(event, card.id)}
                   className="pointer-events-auto absolute"

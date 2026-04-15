@@ -44,6 +44,10 @@ function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && error.message === 'UNAUTHORIZED';
 }
 
+function getApiErrorMessage(error: unknown): string {
+  return (error as { response?: { data?: { message?: string } } })?.response?.data?.message || '';
+}
+
 export default function BoardsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -113,6 +117,11 @@ export default function BoardsPage() {
       } catch (err: unknown) {
         if (isUnauthorizedError(err)) {
           router.push('/auth/login');
+          return;
+        }
+        const message = getApiErrorMessage(err);
+        if (message === 'folder_id 不屬於目前 space' || message === '找不到資料夾') {
+          router.replace('/boards');
           return;
         }
         setError('Failed to load boards.');

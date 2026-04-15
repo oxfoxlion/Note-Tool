@@ -8,7 +8,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
 import type { Card } from '../lib/noteToolApi';
 import { Button } from './ui/button';
-import { Dialog, DialogContent } from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import { Sheet, SheetContent } from './ui/sheet';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
@@ -583,6 +583,10 @@ export default function CardCreateOverlay({
   const overlay = mode === 'modal' ? (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col gap-0 overflow-hidden border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-0">
+        <DialogTitle className="sr-only">Create card</DialogTitle>
+        <DialogDescription className="sr-only">
+          Create a new card in modal.
+        </DialogDescription>
         {panelBody}
       </DialogContent>
     </Dialog>
