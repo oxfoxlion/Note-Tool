@@ -15,16 +15,16 @@ function sanitizeRedirectPath(path: string | null) {
   return path;
 }
 
-export default function GoogleCallbackClient() {
+export default function DiscordCallbackClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [message, setMessage] = useState('正在完成 Google 登入...');
+  const [message, setMessage] = useState('正在完成 Discord 登入...');
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
 
-    async function finalizeGoogleLogin() {
+    async function finalizeDiscordLogin() {
       const redirectTo = sanitizeRedirectPath(searchParams.get('redirect_to'));
       const oauthError = searchParams.get('oauth_error');
       const oauthErrorMessage = searchParams.get('oauth_error_message');
@@ -35,12 +35,12 @@ export default function GoogleCallbackClient() {
       const callbackToken = searchParams.get('token');
 
       if (oauthError) {
-        setError(oauthErrorMessage || 'Google 登入失敗，請稍後再試。');
+        setError(oauthErrorMessage || 'Discord 登入失敗，請稍後再試。');
         return;
       }
 
       if (linked) {
-        setMessage('Google 帳號綁定成功，正在返回設定頁...');
+        setMessage('Discord 帳號綁定成功，正在返回設定頁...');
         router.replace(redirectTo);
         return;
       }
@@ -58,8 +58,6 @@ export default function GoogleCallbackClient() {
 
       try {
         let token = callbackToken;
-
-        // 優先使用 callback query token，避免跨站 refresh cookie 在部分環境無法即時帶上的問題。
         if (!token || typeof token !== 'string') {
           const response = await axios.post(
             `${API_BASE}/note_tool/auth/refresh`,
@@ -70,25 +68,25 @@ export default function GoogleCallbackClient() {
         }
 
         if (!token || typeof token !== 'string') {
-          throw new Error('Google callback missing token');
+          throw new Error('Discord callback missing token');
         }
 
         localStorage.setItem('note_tool_token', token);
         localStorage.removeItem('userId');
 
         if (!cancelled) {
-          setMessage('Google 登入成功，正在前往工作區...');
+          setMessage('Discord 登入成功，正在前往工作區...');
           router.replace(redirectTo);
         }
       } catch (err) {
-        console.error('Google callback finalize error:', err);
+        console.error('Discord callback finalize error:', err);
         if (!cancelled) {
-          setError('Google 登入完成，但無法建立前端登入狀態，請重新登入。');
+          setError('Discord 登入完成，但無法建立前端登入狀態，請重新登入。');
         }
       }
     }
 
-    void finalizeGoogleLogin();
+    void finalizeDiscordLogin();
 
     return () => {
       cancelled = true;

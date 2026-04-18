@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { disableTwoFactorAuth, getUserProfile, type UserProfile } from '../../../lib/noteToolApi';
+import { API_BASE } from '../../../lib/api';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 
@@ -128,6 +129,31 @@ export default function SettingsPage() {
             Enabling 2FA will open setup flow where you scan a QR code and verify once to activate.
           </p>
         )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6 rounded-2xl border-border bg-card shadow-sm">
+        <CardContent className="p-6">
+          <h2 className="text-lg font-semibold text-card-foreground">OAuth Providers</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            已登入帳號可在此手動綁定 provider。系統不會因 email 相同而自動合併帳號。
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Button asChild type="button" variant="outline">
+              <a href={`${API_BASE}/note_tool/auth/google/link/start?redirect_to=%2Fsettings`}>
+                {profile?.googleLinked ? 'Reconnect Google' : 'Link Google'}
+              </a>
+            </Button>
+            <Button asChild type="button" variant="outline">
+              <a href={`${API_BASE}/note_tool/auth/discord/link/start?redirect_to=%2Fsettings`}>
+                {profile?.discordLinked ? 'Reconnect Discord' : 'Link Discord'}
+              </a>
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            目前狀態：Google {profile?.googleLinked ? '已連結' : '未連結'}，Discord{' '}
+            {profile?.discordLinked ? '已連結' : '未連結'}。
+          </p>
         </CardContent>
       </Card>
 

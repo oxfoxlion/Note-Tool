@@ -98,6 +98,11 @@ export default function LoginPage() {
               <a href={`${API_BASE}/note_tool/auth/google/start?redirect_to=%2Fboards`}>Continue with Google</a>
             </Button>
           </div>
+          <div>
+            <Button asChild type="button" variant="outline" className="w-full">
+              <a href={`${API_BASE}/note_tool/auth/discord/start?redirect_to=%2Fboards`}>Continue with Discord</a>
+            </Button>
+          </div>
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border" />

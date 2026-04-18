@@ -298,6 +298,8 @@ export type UserProfile = {
   email: string;
   displayName: string;
   twoFactorEnabled: boolean;
+  googleLinked?: boolean;
+  discordLinked?: boolean;
 };
 
 export type Space = {
