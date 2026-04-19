@@ -136,7 +136,7 @@ export default function SettingsPage() {
         <CardContent className="p-6">
           <h2 className="text-lg font-semibold text-card-foreground">OAuth Providers</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            已登入帳號可在此手動綁定 provider。系統不會因 email 相同而自動合併帳號。
+            Google / Discord 可直接用於登入；首次登入若尚未綁定，系統會自動建立或綁定可用帳號。你也可以在此補綁其他 provider。
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Button asChild type="button" variant="outline">
