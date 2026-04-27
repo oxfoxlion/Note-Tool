@@ -39,17 +39,11 @@ export function useCurrentSpace() {
   const [currentSpaceId, setCurrentSpaceIdState] = useState<number | null>(() => readCurrentSpaceIdFromStorage());
 
   useEffect(() => {
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== CURRENT_SPACE_STORAGE_KEY) return;
-      setCurrentSpaceIdState(readCurrentSpaceIdFromStorage());
-    };
     const handleCustomEvent = () => {
       setCurrentSpaceIdState(readCurrentSpaceIdFromStorage());
     };
-    window.addEventListener('storage', handleStorage);
     window.addEventListener(CURRENT_SPACE_EVENT, handleCustomEvent);
     return () => {
-      window.removeEventListener('storage', handleStorage);
       window.removeEventListener(CURRENT_SPACE_EVENT, handleCustomEvent);
     };
   }, []);
