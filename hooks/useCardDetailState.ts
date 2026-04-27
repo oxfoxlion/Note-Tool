@@ -6,30 +6,43 @@ import { Card, getCards, updateCard } from '../lib/noteToolApi';
 type UseCardDetailStateParams = {
   cardId: string;
   autosaveEnabled: boolean;
-  spaceId: number | null;
   onUnauthorized: () => void;
 };
 
 export function useCardDetailState({
   cardId,
   autosaveEnabled,
-  spaceId,
   onUnauthorized,
 }: UseCardDetailStateParams) {
   const [card, setCard] = useState<Card | null>(null);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const loadedCardIdRef = useRef<string | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
-  const lastSavedRef = useRef<{ title: string; content: string }>({ title: '', content: '' });
+  const lastSavedRef = useRef<{ title: string; content: string; tags: string }>({
+    title: '',
+    content: '',
+    tags: '',
+  });
+
+  const normalizeTags = (raw: string) =>
+    Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0)
+      )
+    );
 
   useEffect(() => {
     const load = async () => {
       try {
-        const cards = await getCards(spaceId);
+        const cards = await getCards(null, { includeAll: true });
         setAllCards(cards);
         const found = cards.find((item) => String(item.id) === String(cardId)) || null;
         setCard(found);
@@ -38,9 +51,14 @@ export function useCardDetailState({
           if (loadedCardIdRef.current !== nextLoadedId) {
             setTitle(found.title);
             setContent(found.content ?? '');
+            setTagsInput((found.tags ?? []).join(', '));
             loadedCardIdRef.current = nextLoadedId;
           }
-          lastSavedRef.current = { title: found.title, content: found.content ?? '' };
+          lastSavedRef.current = {
+            title: found.title,
+            content: found.content ?? '',
+            tags: (found.tags ?? []).join(','),
+          };
         }
       } catch (err: unknown) {
         if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
@@ -54,21 +72,29 @@ export function useCardDetailState({
     if (cardId) {
       void load();
     }
-  }, [cardId, onUnauthorized, spaceId]);
+  }, [cardId, onUnauthorized]);
 
   useEffect(() => {
     if (!card) return;
     if (!autosaveEnabled) return;
-    if (title === lastSavedRef.current.title && content === lastSavedRef.current.content) return;
+    const normalizedTags = normalizeTags(tagsInput);
+    const tagsKey = normalizedTags.join(',');
+    if (
+      title === lastSavedRef.current.title &&
+      content === lastSavedRef.current.content &&
+      tagsKey === lastSavedRef.current.tags
+    ) {
+      return;
+    }
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
     }
     autosaveTimerRef.current = window.setTimeout(() => {
       setIsSaving(true);
-      updateCard(card.id, { title, content })
+      updateCard(card.id, { title, content, tags: normalizedTags })
         .then((updated) => {
           setCard(updated);
-          lastSavedRef.current = { title, content };
+          lastSavedRef.current = { title, content, tags: tagsKey };
         })
         .finally(() => {
           setIsSaving(false);
@@ -80,7 +106,7 @@ export function useCardDetailState({
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [card, autosaveEnabled, title, content]);
+  }, [card, autosaveEnabled, title, content, tagsInput]);
 
   return {
     card,
@@ -90,6 +116,8 @@ export function useCardDetailState({
     setTitle,
     content,
     setContent,
+    tagsInput,
+    setTagsInput,
     isSaving,
     error,
   };

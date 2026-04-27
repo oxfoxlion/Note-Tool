@@ -57,17 +57,17 @@ export default function CardCopyToSpaceModal({
               onClick={() => void onCopy(space.id)}
               disabled={busySpaceId === space.id}
               variant="outline"
-              className="flex h-auto w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="flex h-auto w-full items-center justify-between rounded-xl border-border bg-card px-3 py-2 text-left text-sm text-card-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-60"
             >
               <span className="truncate">
                 {space.name}
                 {space.is_default ? ' (Default)' : ''}
               </span>
-              <span className="text-xs text-slate-400">{busySpaceId === space.id ? 'Copying...' : `#${space.id}`}</span>
+              <span className="text-xs text-muted-foreground">{busySpaceId === space.id ? 'Copying...' : `#${space.id}`}</span>
             </Button>
           ))}
           {targetSpaces.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+            <div className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
               No other spaces available.
             </div>
           )}

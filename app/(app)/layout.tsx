@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ReactNode, CSSProperties } from 'react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Archive, LayoutGrid } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import {
   BoardFolder,
@@ -166,11 +167,14 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const [renameFolderValue, setRenameFolderValue] = useState('');
   const [renameFolderError, setRenameFolderError] = useState('');
   const [deletingFolder, setDeletingFolder] = useState<BoardFolder | null>(null);
+  const [activeFolderIdsBySpace, setActiveFolderIdsBySpace] = useState<Record<number, number | null>>({});
   const lastFolderMutationRef = useRef(0);
-  const lastSpaceRouteRef = useRef<{ at: number; href: string; spaceId: number } | null>(null);
+  const lastSpaceRouteRef = useRef<{ href: string; spaceId: number } | null>(null);
   const selectedFolderId = Number(searchParams.get('folderId'));
-  const hasSelectedFolder = pathname === '/boards' && Number.isInteger(selectedFolderId) && selectedFolderId > 0;
+  const hasSelectedFolder = Number.isInteger(selectedFolderId) && selectedFolderId > 0;
   const currentFolders = currentSpaceId ? foldersBySpace[currentSpaceId] ?? [] : [];
+  const currentSpace = (currentSpaceId ? spaces.find((space) => space.id === currentSpaceId) : null) ?? spaces[0] ?? null;
+  const isCardBoxActive = Boolean(currentSpace && pathname === '/cards' && currentSpaceId === currentSpace.id);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1024px)');
@@ -186,16 +190,16 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const loadSidebar = async () => {
-      const requestStartedAt = Date.now();
+      const requestMutationVersion = lastFolderMutationRef.current;
       try {
         const spacesData = applyStoredSpaceOrder(await getSpaces());
         if (!active) return;
-        if (requestStartedAt < lastFolderMutationRef.current) return;
+        if (requestMutationVersion !== lastFolderMutationRef.current) return;
         const folderEntries = await Promise.all(
           spacesData.map(async (space) => [space.id, applyStoredCustomOrder(await getBoardFolders(space.id), space.id)] as const)
         );
         if (!active) return;
-        if (requestStartedAt < lastFolderMutationRef.current) return;
+        if (requestMutationVersion !== lastFolderMutationRef.current) return;
         setSpaces(spacesData);
         setFoldersBySpace(Object.fromEntries(folderEntries));
 
@@ -222,6 +226,28 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     };
   }, [currentSpaceId, setCurrentSpaceId]);
 
+  useEffect(() => {
+    if (!hasSelectedFolder) return;
+    const matchedSpaceEntry = Object.entries(foldersBySpace).find(([, folders]) =>
+      folders.some((folder) => folder.id === selectedFolderId)
+    );
+    if (!matchedSpaceEntry) return;
+    const [spaceIdRaw] = matchedSpaceEntry;
+    const folderSpaceId = Number(spaceIdRaw);
+    if (!Number.isFinite(folderSpaceId)) return;
+
+    if (folderSpaceId !== currentSpaceId) {
+      setCurrentSpaceId(folderSpaceId);
+    }
+    const nextActiveFolderId = selectedFolderId;
+    const timer = window.setTimeout(() => {
+      setActiveFolderIdsBySpace((prev) =>
+        prev[folderSpaceId] === nextActiveFolderId ? prev : { ...prev, [folderSpaceId]: nextActiveFolderId }
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentSpaceId, foldersBySpace, hasSelectedFolder, selectedFolderId, setCurrentSpaceId]);
+
   const updateFoldersForSpace = (spaceId: number, updater: (folders: BoardFolder[]) => BoardFolder[]) => {
     setFoldersBySpace((prev) => ({
       ...prev,
@@ -230,30 +256,8 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   };
 
   const handleSelectSpaceRoute = (spaceId: number, href: string, source: string) => {
-    const now = Date.now();
-    const lastRoute = lastSpaceRouteRef.current;
     const isDev = process.env.NODE_ENV !== 'production';
-    const shouldIgnoreLikelyDuplicateToCardBox =
-      isDev &&
-      href === '/cards' &&
-      pathname !== '/cards' &&
-      Boolean(lastRoute) &&
-      now - (lastRoute?.at ?? 0) < 1400 &&
-      (lastRoute?.href ?? '') !== '/cards';
-
-    if (shouldIgnoreLikelyDuplicateToCardBox) {
-      if (isDev) {
-        console.debug('[layout] ignored likely duplicate /cards navigation', {
-          source,
-          pathname,
-          spaceId,
-          lastRoute,
-        });
-      }
-      return;
-    }
-
-    lastSpaceRouteRef.current = { at: now, href, spaceId };
+    lastSpaceRouteRef.current = { href, spaceId };
 
     if (isDev) {
       console.debug('[layout] navigate by space route', { source, pathname, href, spaceId });
@@ -265,10 +269,18 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     setOpenFolderMenuId(null);
     setCreatingSpaceAfterId(null);
     setShowFolderCreate(false);
+    if (href === '/cards') {
+      setActiveFolderIdsBySpace((prev) => ({ ...prev, [spaceId]: null }));
+    }
     router.push(href);
     if (isMobile) {
       setCollapsed(true);
     }
+  };
+
+  const handleSwitchSpace = (spaceId: number) => {
+    const nextHref = pathname === '/cards' ? '/cards' : '/boards';
+    handleSelectSpaceRoute(spaceId, nextHref, 'space-switcher');
   };
 
   const toggleSpaceExpanded = (spaceId: number) => {
@@ -301,7 +313,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      lastFolderMutationRef.current = Date.now();
+      lastFolderMutationRef.current += 1;
       const created = await createBoardFolder({ name, space_id: currentSpaceId });
       updateFoldersForSpace(currentSpaceId, (prev) => sortFoldersForUi([...prev, created]));
       setNewFolderName('');
@@ -461,7 +473,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      lastFolderMutationRef.current = Date.now();
+      lastFolderMutationRef.current += 1;
       const updated = await updateBoardFolder(folder.id, { name: nextName });
       const spaceId = folder.space_id ?? currentSpaceId;
       if (spaceId) {
@@ -479,7 +491,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const handleDeleteFolder = async (folder: BoardFolder) => {
     if (folder.is_system) return;
     try {
-      lastFolderMutationRef.current = Date.now();
+      lastFolderMutationRef.current += 1;
       await deleteBoardFolder(folder.id);
       const spaceId = folder.space_id ?? currentSpaceId;
       if (spaceId) {
@@ -497,7 +509,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
   const applyFolderOrder = async (orderedCustomIds: number[]) => {
     if (!currentSpaceId) return;
-    lastFolderMutationRef.current = Date.now();
+    lastFolderMutationRef.current += 1;
     const current = currentFolders;
     const customById = new Map(current.filter((item) => !item.is_system).map((item) => [item.id, item]));
     const archive = current.find((item) => item.system_key === 'archive') ?? null;
@@ -653,137 +665,197 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
           <nav className={`mt-8 flex-1 space-y-1 ${collapsed ? 'px-2' : 'px-4'}`}>
             <div className="space-y-2 pr-1">
-              {spaces.map((space) => {
-                const isCurrentSpace = currentSpaceId === space.id;
-                const isExpanded = expandedSpaceIds.includes(space.id);
-                const folders = foldersBySpace[space.id] ?? [];
-
-                return (
-                  <div key={space.id} className="rounded-lg">
-                    <div
-                      className={cn(
-                        'flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-medium transition',
-                        isCurrentSpace && 'font-semibold'
-                      )}
+              {!collapsed && (
+                <div className="rounded-xl border px-3 py-2" style={{ borderColor: 'var(--sidebar-border)' }}>
+                  <div className="mb-1 text-[10px] uppercase tracking-[0.2em]" style={{ color: 'var(--sidebar-muted)' }}>
+                    Space
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-8 w-full justify-between rounded-md border px-2 text-xs hover:bg-[color:var(--sidebar-hover)]"
+                        style={{
+                          borderColor: 'var(--sidebar-border)',
+                          color: 'var(--sidebar-fg)',
+                          background: 'var(--sidebar-active)',
+                        }}
+                        title={currentSpace?.name ?? 'Select space'}
+                        aria-label="Switch space"
+                      >
+                        <span className="truncate">{currentSpace?.name ?? 'Select space'}</span>
+                        <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5 shrink-0" aria-hidden="true">
+                          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                        </svg>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="w-52"
                       style={{
-                        borderColor: isCurrentSpace ? 'var(--sidebar-border)' : 'transparent',
-                        background: isCurrentSpace ? 'var(--sidebar-active)' : 'transparent',
+                        borderColor: 'var(--sidebar-border)',
+                        background: 'var(--sidebar-bg)',
                         color: 'var(--sidebar-fg)',
                       }}
                     >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleSpaceExpanded(space.id)}
-                          className="rounded p-0.5"
-                          style={{ color: 'var(--sidebar-muted)' }}
-                          aria-label={isExpanded ? `Collapse ${space.name}` : `Expand ${space.name}`}
-                          title={isExpanded ? 'Collapse' : 'Expand'}
-                        >
-                          <svg viewBox="0 0 16 16" className={`h-3.5 w-3.5 transition ${isExpanded ? 'rotate-90' : ''}`} aria-hidden="true">
-                            <path
-                              d="M6 3l5 5-5 5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectSpaceRoute(space.id, '/boards', 'space-name')}
-                          className="min-w-0 flex-1 text-left"
-                          title={space.name}
-                        >
-                          <span className="block truncate">{space.name}</span>
-                        </button>
-                      </div>
-
-                      {!collapsed && (
-                        <DropdownMenu
-                          open={openSpaceMenuId === space.id}
-                          onOpenChange={(open) => {
-                            setOpenFolderMenuId(null);
-                            setOpenSpaceMenuId(open ? space.id : null);
-                          }}
-                        >
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="ml-2 h-8 w-8 rounded-full"
-                              style={{ color: 'var(--sidebar-fg)' }}
-                              title="Space actions"
-                              aria-label={`Space actions for ${space.name}`}
-                            >
-                              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                                <circle cx="5" cy="12" r="1.7" fill="currentColor" />
-                                <circle cx="12" cy="12" r="1.7" fill="currentColor" />
-                                <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                      {spaces.map((space) => {
+                        const selected = currentSpaceId === space.id;
+                        return (
+                          <DropdownMenuItem key={space.id} onClick={() => handleSwitchSpace(space.id)} className="justify-between">
+                            <span className="truncate">{space.name}</span>
+                            {selected ? (
+                              <svg viewBox="0 0 24 24" className="ml-2 h-4 w-4 shrink-0" aria-hidden="true">
+                                <path d="M5 12l4 4 10-10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                               </svg>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="w-44"
-                            style={{
-                              borderColor: 'var(--sidebar-border)',
-                              background: 'var(--sidebar-bg)',
-                              color: 'var(--sidebar-fg)',
-                            }}
-                          >
-                            <DropdownMenuItem onClick={() => handleOpenCreateFolder(space.id)}>
-                              Create folder
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setOpenSpaceMenuId(null);
-                                setRenamingSpace(space);
-                                setRenameSpaceValue(space.name);
-                                setRenameSpaceError('');
-                              }}
-                            >
-                              Rename space
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleOpenCreateSpace(space.id)}>
-                              Add space below
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setOpenSpaceMenuId(null);
-                                setDeletingSpace(space);
-                                setSpaceError('');
-                              }}
-                              className="text-rose-400 focus:text-rose-300"
-                            >
-                              Delete space
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                            ) : null}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+
+              {currentSpace && (
+                <div key={currentSpace.id} className="rounded-lg">
+                  <div
+                    className={cn(
+                      'flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-medium transition hover:bg-[color:var(--sidebar-hover)]',
+                      currentSpaceId === currentSpace.id && 'font-semibold'
+                    )}
+                    style={{
+                      borderColor: 'transparent',
+                      background: undefined,
+                      color: 'var(--sidebar-fg)',
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleSpaceExpanded(currentSpace.id)}
+                        className="rounded p-0.5"
+                        style={{ color: 'var(--sidebar-muted)' }}
+                        aria-label={expandedSpaceIds.includes(currentSpace.id) ? `Collapse ${currentSpace.name}` : `Expand ${currentSpace.name}`}
+                        title={expandedSpaceIds.includes(currentSpace.id) ? 'Collapse' : 'Expand'}
+                      >
+                        <svg
+                          viewBox="0 0 16 16"
+                          className={`h-3.5 w-3.5 transition ${expandedSpaceIds.includes(currentSpace.id) ? 'rotate-90' : ''}`}
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M6 3l5 5-5 5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSpaceRoute(currentSpace.id, '/boards', 'space-name')}
+                        className="min-w-0 flex-1 text-left"
+                        title={currentSpace.name}
+                      >
+                        <span className="block truncate">{currentSpace.name}</span>
+                      </button>
                     </div>
 
-                    {!collapsed && isExpanded && (
-                      <div className="mt-1 space-y-1 pl-6 pr-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectSpaceRoute(space.id, '/cards', 'card-box')}
-                          className="flex w-full items-center rounded-md px-3 py-1.5 text-left text-xs transition"
+                    {!collapsed && (
+                      <DropdownMenu
+                        open={openSpaceMenuId === currentSpace.id}
+                        onOpenChange={(open) => {
+                          setOpenFolderMenuId(null);
+                          setOpenSpaceMenuId(open ? currentSpace.id : null);
+                        }}
+                      >
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="ml-2 h-8 w-8 rounded-full"
+                            style={{ color: 'var(--sidebar-fg)' }}
+                            title="Space actions"
+                            aria-label={`Space actions for ${currentSpace.name}`}
+                          >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                              <circle cx="5" cy="12" r="1.7" fill="currentColor" />
+                              <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                              <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                            </svg>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-44"
                           style={{
-                            background:
-                              pathname === '/cards' && isCurrentSpace ? 'var(--sidebar-active)' : 'transparent',
+                            borderColor: 'var(--sidebar-border)',
+                            background: 'var(--sidebar-bg)',
                             color: 'var(--sidebar-fg)',
                           }}
-                          title="Card Box"
                         >
-                          Card Box
-                        </button>
+                          <DropdownMenuItem onClick={() => handleOpenCreateFolder(currentSpace.id)}>
+                            Create folder
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setOpenSpaceMenuId(null);
+                              setRenamingSpace(currentSpace);
+                              setRenameSpaceValue(currentSpace.name);
+                              setRenameSpaceError('');
+                            }}
+                          >
+                            Rename space
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenCreateSpace(currentSpace.id)}>
+                            Add space below
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setOpenSpaceMenuId(null);
+                              setDeletingSpace(currentSpace);
+                              setSpaceError('');
+                            }}
+                            className="text-rose-400 focus:text-rose-300"
+                          >
+                            Delete space
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
 
-                        {folders.map((folder) => {
-                          const active = isCurrentSpace && hasSelectedFolder && selectedFolderId === folder.id;
+                  {!collapsed && expandedSpaceIds.includes(currentSpace.id) && (
+                    <div className="mt-1 space-y-1 pl-6 pr-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSpaceRoute(currentSpace.id, '/cards', 'card-box')}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition hover:bg-[color:var(--sidebar-hover)]',
+                          isCardBoxActive && 'font-semibold'
+                        )}
+                        style={{
+                          background: isCardBoxActive ? 'var(--sidebar-active)' : undefined,
+                          color: 'var(--sidebar-fg)',
+                        }}
+                        title="Card Box"
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">Card Box</span>
+                      </button>
+
+                      <div className="mt-3 border-t border-[color:var(--sidebar-border)] pt-3" />
+                      <div className="space-y-1">
+                        {currentFolders.map((folder) => {
+                          const active =
+                            pathname.startsWith('/boards') &&
+                            (activeFolderIdsBySpace[currentSpace.id] === folder.id ||
+                              (hasSelectedFolder && selectedFolderId === folder.id));
+                          const isArchive = folder.system_key === 'archive';
 
                           return (
                             <div key={folder.id} className="relative">
@@ -792,19 +864,28 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                                 draggable={false}
                                 onClick={() => {
                                   setOpenFolderMenuId(null);
-                                  handleSelectSpaceRoute(space.id, `/boards?folderId=${folder.id}`, 'folder');
+                                  setActiveFolderIdsBySpace((prev) => ({ ...prev, [currentSpace.id]: folder.id }));
+                                  handleSelectSpaceRoute(currentSpace.id, `/boards?folderId=${folder.id}`, 'folder');
                                 }}
-                                className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-xs transition"
+                                className={cn(
+                                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 pr-10 text-left text-xs transition hover:bg-[color:var(--sidebar-hover)]',
+                                  active && 'font-semibold'
+                                )}
                                 style={{
-                                  background: active ? 'var(--sidebar-active)' : 'transparent',
+                                  background: active ? 'var(--sidebar-active)' : undefined,
                                   color: 'var(--sidebar-fg)',
                                 }}
                                 title={folder.name}
                               >
-                                <span className="truncate pr-10">{folder.name}</span>
+                                <span className="flex min-w-0 items-center gap-2">
+                                  {isArchive ? (
+                                    <Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                  ) : null}
+                                  <span className="truncate">{folder.name}</span>
+                                </span>
                               </button>
 
-                              {!folder.is_system && isCurrentSpace && (
+                              {!folder.is_system && (
                                 <DropdownMenu
                                   open={openFolderMenuId === folder.id}
                                   onOpenChange={(open) => setOpenFolderMenuId(open ? folder.id : null)}
@@ -867,10 +948,10 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                           );
                         })}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <Link
@@ -880,9 +961,9 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                   setCollapsed(true);
                 }
               }}
-              className="mt-2 flex items-center rounded-lg px-3 py-2 text-sm font-medium transition"
+              className="mt-2 flex items-center rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-[color:var(--sidebar-hover)]"
               style={{
-                background: pathname === '/settings' ? 'var(--sidebar-active)' : 'transparent',
+                background: pathname === '/settings' ? 'var(--sidebar-active)' : undefined,
                 color: 'var(--sidebar-fg)',
               }}
               title="Settings"
@@ -913,7 +994,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
           {!collapsed && (
             <div
-              className="mt-auto border-t border-slate-700/40 px-4 pb-6 pt-4 text-center text-[11px] tracking-[0.08em]"
+              className="mt-auto border-t px-4 pb-6 pt-4 text-center text-[11px] tracking-[0.08em]"
               style={{ color: 'var(--sidebar-muted)' }}
             >
               InstantCheese Shao
@@ -925,7 +1006,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => setCollapsed(false)}
-            className="absolute left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-md hover:bg-slate-50"
+            className="absolute left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-accent"
             aria-label="Expand sidebar"
             title="Expand sidebar"
           >

@@ -20,7 +20,7 @@ type RegionView = {
   height: number;
 };
 
-const DEFAULT_REGION_COLOR = '#38bdf8';
+const DEFAULT_REGION_COLOR = '#737373';
 
 function normalizeRegionColor(color: string | null | undefined): string {
   if (typeof color !== 'string') return DEFAULT_REGION_COLOR;
@@ -376,7 +376,7 @@ export default function SharedBoardPage() {
     <div className="h-screen w-screen overflow-hidden bg-background">
       <div className="relative h-full w-full">
         <div className="pointer-events-none absolute left-6 top-6 z-20">
-          <h1 className="text-2xl font-semibold text-foreground [text-shadow:0_2px_8px_rgba(15,23,42,0.18)]">
+          <h1 className="text-2xl font-semibold text-foreground">
             {boardName || 'Shared Board'}
           </h1>
           <div className="mt-1 text-xs text-muted-foreground">Read-only shared view</div>
@@ -506,7 +506,7 @@ export default function SharedBoardPage() {
                     y1={sourcePoint.y}
                     x2={targetPoint.x}
                     y2={targetPoint.y}
-                    stroke="#6b7280"
+                    stroke="var(--muted-foreground)"
                     strokeOpacity="0.98"
                     strokeWidth="2.2"
                     vectorEffect="non-scaling-stroke"

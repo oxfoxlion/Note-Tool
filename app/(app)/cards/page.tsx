@@ -43,6 +43,7 @@ export default function CardsPage() {
   const [selectedBoardLinkedCardIds, setSelectedBoardLinkedCardIds] = useState<number[]>([]);
   const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
   const [boardFilter, setBoardFilter] = useState<string>('');
+  const [tagFilter, setTagFilter] = useState<string>('');
   const [error, setError] = useState('');
   const [cardPreviewLength, setCardPreviewLength] = useState(120);
   const [pageState, setPageState] = useState<{ value: number; key: string }>({ value: 1, key: '' });
@@ -110,17 +111,37 @@ export default function CardsPage() {
     loadBoardCards();
   }, [boardFilter, allCards]);
 
+  const effectiveTagFilter = useMemo(() => {
+    if (!tagFilter) return '';
+    const hasTag = cards.some((card) => (card.tags ?? []).includes(tagFilter));
+    return hasTag ? tagFilter : '';
+  }, [tagFilter, cards]);
+
   const filteredCards = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return cards;
     return cards.filter((card) => {
+      if (effectiveTagFilter) {
+        const tags = card.tags ?? [];
+        if (!tags.includes(effectiveTagFilter)) return false;
+      }
+      if (!keyword) return true;
       const haystack = `${card.title} ${card.content ?? ''}`.toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [cards, query]);
+  }, [cards, query, effectiveTagFilter]);
+
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    cards.forEach((card) => {
+      (card.tags ?? []).forEach((tag) => {
+        if (tag.trim()) tags.add(tag);
+      });
+    });
+    return Array.from(tags).sort((a, b) => a.localeCompare(b));
+  }, [cards]);
 
   const pageSize = isMobile ? 12 : isXl ? 9 : 6;
-  const pageResetKey = `${query}::${boardFilter}::${cards.length}::${isMobile ? 'm' : 'd'}::${isXl ? 'x' : 'n'}`;
+  const pageResetKey = `${query}::${boardFilter}::${tagFilter}::${cards.length}::${isMobile ? 'm' : 'd'}::${isXl ? 'x' : 'n'}`;
 
   const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
   const requestedPage = pageState.key === pageResetKey ? pageState.value : 1;
@@ -130,9 +151,14 @@ export default function CardsPage() {
     return filteredCards.slice(start, start + pageSize);
   }, [filteredCards, currentPage, pageSize]);
 
-  const handleCreate = async (payload: { title: string; content: string }) => {
+  const handleCreate = async (payload: { title: string; content: string; tags: string[] }) => {
     setError('');
-    const created = await createCard({ title: payload.title, content: payload.content, space_id: currentSpaceId });
+    const created = await createCard({
+      title: payload.title,
+      content: payload.content,
+      tags: payload.tags,
+      space_id: currentSpaceId,
+    });
     const nextAll = [created, ...allCards];
     setAllCards(nextAll);
     if (!boardFilter) {
@@ -140,7 +166,7 @@ export default function CardsPage() {
     }
   };
 
-  const handleSave = async (payload: { title: string; content: string }) => {
+  const handleSave = async (payload: { title: string; content: string; tags: string[] }) => {
     if (!selectedCard) return;
     const updated = await updateCard(selectedCard.id, payload);
     const updateList = (list: Card[]) =>
@@ -237,8 +263,8 @@ export default function CardsPage() {
     <div className="space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="text-xs uppercase tracking-[0.3em] text-slate-400">Card Box</div>
-          <div className="mt-2 min-h-[20px] text-sm font-semibold text-slate-700">{boardFilter ? boardTitle : ''}</div>
+          <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Card Box</div>
+          <div className="mt-2 min-h-[20px] text-sm font-semibold text-card-foreground">{boardFilter ? boardTitle : ''}</div>
         </div>
         <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
           {showSearch && (
@@ -273,7 +299,7 @@ export default function CardsPage() {
           </Button>
           {!isMobile && (
             <Tabs value={cardOpenMode} onValueChange={(value) => void handleOpenModeChange(value as 'modal' | 'sidepanel')}>
-              <TabsList className="rounded-full">
+              <TabsList className="rounded-full bg-card shadow-sm">
                 <TabsTrigger value="modal" className="rounded-full px-3" aria-label="Open in modal" title="Open in modal">
                   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
                     <rect x="5" y="6" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.6" fill="none" />
@@ -312,12 +338,36 @@ export default function CardsPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
+                <span className="truncate">{tagFilter || 'All tags'}</span>
+                <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => setTagFilter('')} className={tagFilter === '' ? 'bg-accent' : undefined}>
+                All tags
+              </DropdownMenuItem>
+              {availableTags.map((tag) => (
+                <DropdownMenuItem
+                  key={tag}
+                  onClick={() => setTagFilter(tag)}
+                  className={tag === tagFilter ? 'bg-accent' : undefined}
+                >
+                  {tag}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
       <div className="flex items-center justify-between">
         {error ? <div className="text-xs text-rose-600">{error}</div> : <div />}
-        <Badge variant="outline" className="text-[11px] text-slate-500">
+        <Badge variant="outline" className="text-[11px] text-muted-foreground">
           {filteredCards.length} cards
         </Badge>
       </div>
@@ -349,7 +399,7 @@ export default function CardsPage() {
         </section>
       </div>
 
-      <div className="fixed bottom-1 left-1/2 z-40 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-2 py-1 shadow-sm backdrop-blur md:bottom-3">
+      <div className="fixed bottom-1 left-1/2 z-40 -translate-x-1/2 rounded-full border border-border bg-background/95 px-2 py-1 shadow-sm backdrop-blur md:bottom-3">
         <div className="flex items-center justify-center gap-3">
           <Button
             type="button"
@@ -366,7 +416,7 @@ export default function CardsPage() {
           >
             Prev
           </Button>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-muted-foreground">
             {currentPage} / {totalPages}
           </div>
           <Button

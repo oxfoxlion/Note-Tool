@@ -56,6 +56,18 @@ export default function CardPreview({
   const body = (
     <>
       <div className="text-sm font-semibold text-card-foreground">{card.title}</div>
+      {(card.tags ?? []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(card.tags ?? []).slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
       {renderMarkdown ? (
         <div
           className={`card-preview-surface prose prose-sm mt-2 max-w-none overflow-x-auto overflow-y-auto text-sm text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground ${
@@ -111,7 +123,7 @@ export default function CardPreview({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full rounded-xl border border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-4 text-left text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent/40 hover:shadow-md ${
+      className={`w-full rounded-xl border border-[color:var(--panel-border)] bg-[color:var(--panel-bg)] p-4 text-left text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent hover:shadow-md ${
         fillHeight ? 'h-full' : ''
       }`}
     >

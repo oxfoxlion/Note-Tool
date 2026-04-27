@@ -31,6 +31,7 @@ export default function CardDetailPage() {
   const [showCardMenu, setShowCardMenu] = useState(false);
   const [showCopyToSpace, setShowCopyToSpace] = useState(false);
   const [spaces, setSpaces] = useState<Space[]>([]);
+  const [mentionSpaces, setMentionSpaces] = useState<Space[]>([]);
   const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
   const [copyError, setCopyError] = useState('');
   const [copySuccessMessage, setCopySuccessMessage] = useState('');
@@ -49,10 +50,9 @@ export default function CardDetailPage() {
     router.push('/auth/login');
   }, [router]);
 
-  const { card, allCards, title, setTitle, content, setContent, isSaving, error } = useCardDetailState({
+  const { card, allCards, title, setTitle, content, setContent, tagsInput, setTagsInput, isSaving, error } = useCardDetailState({
     cardId,
     autosaveEnabled: activeViewMode !== 'view',
-    spaceId: currentSpaceId,
     onUnauthorized: handleUnauthorized,
   });
 
@@ -67,6 +67,32 @@ export default function CardDetailPage() {
   const markdownTools = useMarkdownEditorTools({ content, setContent, editorRef });
   const mentions = useCardMentions({ content, setContent, editorRef });
   const linkedCards = useCardLinks({ allCards, content, cardId: card?.id });
+  const mentionSpaceNameById = useMemo(() => {
+    const map: Record<number, string> = {};
+    mentionSpaces.forEach((space) => {
+      map[space.id] = space.name;
+    });
+    return map;
+  }, [mentionSpaces]);
+
+  useEffect(() => {
+    let active = true;
+    const loadMentionSpaces = async () => {
+      try {
+        const data = await getSpaces();
+        if (!active) return;
+        setMentionSpaces(data);
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+          handleUnauthorized();
+        }
+      }
+    };
+    void loadMentionSpaces();
+    return () => {
+      active = false;
+    };
+  }, [handleUnauthorized]);
 
   useEffect(() => {
     if (!showCopyToSpace) return;
@@ -195,6 +221,7 @@ export default function CardDetailPage() {
             mentionCards={allCards}
             mentionCurrentCardId={card.id}
             mentionQuery={mentions.mentionQuery}
+            mentionSpaceNameById={mentionSpaceNameById}
             mentionPosition={mentions.mentionPos}
             mentionMenuRef={mentions.mentionMenuRef}
             onMentionSelect={mentions.handleMentionSelect}
@@ -220,6 +247,7 @@ export default function CardDetailPage() {
           mentionCards={allCards}
           mentionCurrentCardId={card.id}
           mentionQuery={mentions.mentionQuery}
+          mentionSpaceNameById={mentionSpaceNameById}
           mentionPosition={mentions.mentionPos}
           mentionMenuRef={mentions.mentionMenuRef}
           onMentionSelect={mentions.handleMentionSelect}
@@ -232,6 +260,15 @@ export default function CardDetailPage() {
           onToggleTaskAtIndex={markdownTools.toggleTaskAtIndex}
           onOpenCard={(id) => router.push(`/cards/${id}`)}
           scrollPaddingClassName="px-0 py-1"
+        />
+      )}
+
+      {activeViewMode !== 'view' && (
+        <input
+          value={tagsInput}
+          onChange={(event) => setTagsInput(event.target.value)}
+          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-card-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+          placeholder="Tags (comma separated)"
         />
       )}
 

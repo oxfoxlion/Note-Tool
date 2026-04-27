@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import CardOverlay from '../../../../components/CardOverlay';
 import CardCreateOverlay from '../../../../components/CardCreateOverlay';
 import CardPreview from '../../../../components/CardPreview';
@@ -85,16 +85,16 @@ type LinkDraft = {
   pointerY: number;
 };
 
-const DEFAULT_REGION_COLOR = '#38bdf8';
+const DEFAULT_REGION_COLOR = '#737373';
 const REGION_COLOR_PRESETS = [
-  '#38bdf8',
-  '#22c55e',
-  '#f59e0b',
-  '#ef4444',
-  '#a855f7',
-  '#14b8a6',
-  '#f97316',
-  '#64748b',
+  '#a3a3a3',
+  '#8a8a8a',
+  '#737373',
+  '#5a5a5a',
+  '#4a4a4a',
+  '#3f3f3f',
+  '#2f2f2f',
+  '#1f1f1f',
 ];
 
 function normalizeRegionColor(color: string | null | undefined): string {
@@ -131,6 +131,7 @@ function findCardById(cards: Card[], targetCardId: number): Card | null {
 export default function BoardDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentSpaceId } = useCurrentSpace();
   const boardId = Number(params.id);
   const toolbarStorageKey = 'note_tool_board_toolbar_visible';
@@ -182,6 +183,8 @@ export default function BoardDetailPage() {
   const [regionNameError, setRegionNameError] = useState('');
   const [pendingRegion, setPendingRegion] = useState<DraftRegion | null>(null);
   const [editingRegionId, setEditingRegionId] = useState<number | null>(null);
+  const [flashCardId, setFlashCardId] = useState<number | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const defaultCardWidth = 420;
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -279,6 +282,14 @@ export default function BoardDetailPage() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) {
+        clearTimeout(flashTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       setShowToolbar(window.localStorage.getItem(toolbarStorageKey) === '1');
     } catch {
@@ -338,6 +349,15 @@ export default function BoardDetailPage() {
       load();
     }
   }, [boardId, router, currentSpaceId]);
+
+  useEffect(() => {
+    if (!boardSummary) return;
+    const nextFolderId = boardSummary.folder_id ? String(boardSummary.folder_id) : '';
+    const currentFolderId = searchParams.get('folderId') ?? '';
+    if (currentFolderId === nextFolderId) return;
+    const nextUrl = nextFolderId ? `/boards/${boardId}?folderId=${nextFolderId}` : `/boards/${boardId}`;
+    router.replace(nextUrl);
+  }, [boardId, boardSummary, router, searchParams]);
 
   const searchResults = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -401,7 +421,7 @@ export default function BoardDetailPage() {
     );
   }, [boardLinks, cards]);
 
-  const handleCreate = async (payload: { title: string; content: string }) => {
+  const handleCreate = async (payload: { title: string; content: string; tags: string[] }) => {
     setError('');
     const data = await createCardInBoard(boardId, payload);
     setCards((prev) => [data.card, ...prev]);
@@ -462,7 +482,7 @@ export default function BoardDetailPage() {
     setShowImport(false);
   };
 
-  const handleSave = async (payload: { title: string; content: string }) => {
+  const handleSave = async (payload: { title: string; content: string; tags: string[] }) => {
     if (!selectedCard) return;
     const updated = await updateCard(selectedCard.id, payload);
     setCards((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -1310,6 +1330,24 @@ export default function BoardDetailPage() {
     setViewport({ x: nextX, y: nextY, scale });
   };
 
+  const triggerCardFlash = (cardId: number) => {
+    if (flashTimerRef.current) {
+      clearTimeout(flashTimerRef.current);
+    }
+    setFlashCardId(cardId);
+    flashTimerRef.current = setTimeout(() => {
+      setFlashCardId((prev) => (prev === cardId ? null : prev));
+      flashTimerRef.current = null;
+    }, 650);
+  };
+
+  const handleSearchResultSelect = (cardId: number) => {
+    focusCard(cardId);
+    triggerCardFlash(cardId);
+    setShowSearch(false);
+    setQuery('');
+  };
+
   const selectedBoardLinkedCardIds = useMemo(() => {
     if (!selectedCard) return [];
     const linked = new Set<number>();
@@ -1504,7 +1542,7 @@ export default function BoardDetailPage() {
     <div className="board-root -mx-6 -my-8 h-[calc(100vh-0px)]">
       <div className="relative h-full">
         <div className="pointer-events-none absolute left-6 top-6 z-20">
-          <h1 className="text-2xl font-semibold text-[color:var(--app-foreground)] [text-shadow:0_2px_8px_rgba(15,23,42,0.25)]">
+          <h1 className="text-2xl font-semibold text-[color:var(--app-foreground)]">
             {boardName || 'Board'}
           </h1>
         </div>
@@ -1536,7 +1574,7 @@ export default function BoardDetailPage() {
                             <button
                               key={card.id}
                               type="button"
-                              onClick={() => focusCard(card.id)}
+                              onClick={() => handleSearchResultSelect(card.id)}
                               className="w-full rounded-xl border border-border bg-card px-3 py-3 text-left text-sm text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground hover:shadow-md"
                             >
                               <div className="text-sm font-semibold">{card.title}</div>
@@ -1959,7 +1997,7 @@ export default function BoardDetailPage() {
                       x2={targetPoint.x}
                       y2={targetPoint.y}
                       className="pointer-events-none"
-                      stroke={isHovered ? '#4b5563' : '#6b7280'}
+                      stroke={isHovered ? 'var(--foreground)' : 'var(--muted-foreground)'}
                       strokeOpacity="0.98"
                       strokeWidth={isHovered ? '2.8' : '2.2'}
                       vectorEffect="non-scaling-stroke"
@@ -1991,7 +2029,7 @@ export default function BoardDetailPage() {
                   x2={linkDraft.pointerX}
                   y2={linkDraft.pointerY}
                   className="pointer-events-none"
-                  stroke="#9ca3af"
+                  stroke="var(--muted-foreground)"
                   strokeOpacity="0.95"
                   strokeDasharray="4 4"
                   strokeWidth="2"
@@ -2050,7 +2088,13 @@ export default function BoardDetailPage() {
                     }
                     setSelectedCard(card);
                   }}
-                  className={`absolute select-none ${tool === 'add' ? 'cursor-grab' : 'cursor-default'}`}
+                  className={`absolute select-none transition-all duration-300 ${
+                    tool === 'add' ? 'cursor-grab' : 'cursor-default'
+                  } ${
+                    flashCardId === card.id
+                      ? 'rounded-xl ring-4 ring-ring/25'
+                      : ''
+                  }`}
                   style={{
                     transform: `translate(${pos.x}px, ${pos.y}px)`,
                     width: pos.width ?? defaultCardWidth,
@@ -2107,7 +2151,7 @@ export default function BoardDetailPage() {
                             event.stopPropagation();
                             suppressNextStageClickRef.current = true;
                           }}
-                          className={`absolute z-10 h-4 w-4 rounded-full border border-[#6b7280] bg-[#d1d5db] shadow-sm transition dark:border-[#d1d5db] dark:bg-[#6b7280] ${anchorClass} ${tool === 'add' && (hoveredCardId === card.id || linkDraft) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                          className={`absolute z-10 h-4 w-4 rounded-full border border-border bg-muted shadow-sm transition ${anchorClass} ${tool === 'add' && (hoveredCardId === card.id || linkDraft) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                           aria-label={`Link from ${handle}`}
                           title={`Link from ${handle}`}
                         />
@@ -2277,7 +2321,7 @@ export default function BoardDetailPage() {
                         });
                       }}
                       className={`rounded-xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                        selected ? 'border-foreground bg-accent/70 ring-1 ring-ring/30' : 'border-border bg-card hover:bg-accent/30'
+                        selected ? 'border-foreground bg-accent ring-1 ring-ring/30' : 'border-border bg-card hover:bg-accent'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -2402,17 +2446,17 @@ export default function BoardDetailPage() {
                             {link.permission}
                           </span>
                           {link.password_protected && (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                            <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground">
                               password
                             </span>
                           )}
                           {isRevoked && (
-                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-600">
+                            <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground">
                               revoked
                             </span>
                           )}
                           {!isRevoked && isExpired && (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700">
+                            <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground">
                               expired
                             </span>
                           )}
@@ -2438,7 +2482,7 @@ export default function BoardDetailPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleRevokeShareLink(link.id)}
-                              className="rounded-full border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                              className="rounded-full border-border text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             >
                               Revoke
                             </Button>
@@ -2562,7 +2606,7 @@ export default function BoardDetailPage() {
                       type="button"
                       onClick={() => setRegionColorValue(preset)}
                       className={`h-6 w-6 rounded-full border ${selected ? 'ring-2 ring-ring ring-offset-1 ring-offset-background' : ''}`}
-                      style={{ backgroundColor: preset, borderColor: selected ? '#334155' : '#cbd5e1' }}
+                      style={{ backgroundColor: preset, borderColor: selected ? 'var(--ring)' : 'var(--border)' }}
                       title={preset}
                       aria-label={`Use color ${preset}`}
                     />

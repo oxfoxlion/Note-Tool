@@ -70,39 +70,44 @@
 }
 
 .theme-dark {
-  --app-bg: #020617;
+  --app-bg: #161616;
   --app-foreground: #e2e8f0;
-  --panel-bg: #172033;
-  --panel-border: #243044;
-  --sidebar-bg: #111111;
+  --panel-bg: #1f1f1f;
+  --panel-border: #2f2f2f;
+  --sidebar-bg: #1f1f1f;
   --sidebar-fg: #e2e8f0;
-  --sidebar-muted: #94a3b8;
-  --sidebar-border: #2a2a2a;
-  --sidebar-hover: #1b1b1b;
-  --sidebar-active: #222222;
-  --board-grid-dot: rgba(148, 163, 184, 0.12);
-  --background: #020617;
+  --sidebar-muted: #a3a3a3;
+  --sidebar-border: #2f2f2f;
+  --sidebar-hover: #262626;
+  --sidebar-active: #2a2a2a;
+  --board-grid-dot: rgba(163, 163, 163, 0.14);
+  --background: #161616;
   --foreground: #e2e8f0;
-  --card: #0f172a;
+  --card: #1f1f1f;
   --card-foreground: #e2e8f0;
-  --popover: #0f172a;
+  --popover: #1f1f1f;
   --popover-foreground: #e2e8f0;
   --primary: #f8fafc;
   --primary-foreground: #020617;
-  --secondary: #111827;
+  --secondary: #232323;
   --secondary-foreground: #e2e8f0;
-  --muted: #111827;
-  --muted-foreground: #94a3b8;
-  --accent: #1e293b;
+  --muted: #242424;
+  --muted-foreground: #a3a3a3;
+  --accent: #2a2a2a;
   --accent-foreground: #e2e8f0;
   --destructive: #7f1d1d;
   --destructive-foreground: #fecaca;
-  --border: #1e293b;
-  --input: #1e293b;
-  --ring: #64748b;
-  --scrollbar-track: rgba(30, 41, 59, 0.4);
-  --scrollbar-thumb: rgba(148, 163, 184, 0.34);
-  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.52);
+  --border: #2f2f2f;
+  --input: #2f2f2f;
+  --ring: #8a8a8a;
+  --scrollbar-track: rgba(60, 60, 60, 0.42);
+  --scrollbar-thumb: rgba(140, 140, 140, 0.4);
+  --scrollbar-thumb-hover: rgba(170, 170, 170, 0.58);
+  --code-block-bg: #181818;
+  --code-block-fg: #e5e5e5;
+  --code-token-function: #d4d4d4;
+  --code-token-variable: #c4c4c4;
+  --code-token-string: #b4b4b4;
 }
 
 @theme inline {
@@ -381,12 +386,69 @@ body {
   -webkit-text-fill-color: var(--card-foreground) !important;
 }
 
-.card-editor-surface .w-md-editor-text-input::placeholder {
-  color: var(--muted-foreground) !important;
+.card-editor-surface .w-md-editor .w-md-editor-text-input,
+.card-editor-surface .w-md-editor .w-md-editor-text-pre {
+  color: var(--card-foreground) !important;
+  -webkit-text-fill-color: var(--card-foreground) !important;
+  opacity: 1 !important;
 }
 
-.theme-dark .card-editor-surface .w-md-editor-text-pre {
-  opacity: 0 !important;
+.card-editor-surface .w-md-editor-text-input {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre {
+  opacity: 1 !important;
+}
+
+.card-editor-surface .w-md-editor-text-input::placeholder {
+  color: var(--muted-foreground) !important;
+  -webkit-text-fill-color: var(--muted-foreground) !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.function,
+.card-editor-surface .w-md-editor-text-pre .token.method,
+.card-editor-surface .w-md-editor-text-pre .hljs-function .hljs-title,
+.card-editor-surface .w-md-editor-text-pre .hljs-title.function_,
+.card-editor-surface .w-md-editor-text-pre .hljs-title.function {
+  color: var(--code-token-function) !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.variable,
+.card-editor-surface .w-md-editor-text-pre .hljs-variable,
+.card-editor-surface .w-md-editor-text-pre .hljs-attr {
+  color: var(--code-token-variable) !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.string,
+.card-editor-surface .w-md-editor-text-pre .hljs-string {
+  color: var(--code-token-string) !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.keyword,
+.card-editor-surface .w-md-editor-text-pre .token.atrule,
+.card-editor-surface .w-md-editor-text-pre .hljs-keyword {
+  color: #d8d8d8 !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.number,
+.card-editor-surface .w-md-editor-text-pre .token.boolean,
+.card-editor-surface .w-md-editor-text-pre .hljs-number,
+.card-editor-surface .w-md-editor-text-pre .hljs-literal {
+  color: #c6c6c6 !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.operator,
+.card-editor-surface .w-md-editor-text-pre .token.punctuation,
+.card-editor-surface .w-md-editor-text-pre .hljs-operator,
+.card-editor-surface .w-md-editor-text-pre .hljs-punctuation {
+  color: #aaaaaa !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.comment,
+.card-editor-surface .w-md-editor-text-pre .hljs-comment {
+  color: var(--muted-foreground) !important;
 }
 
 /* Normalize task-list checkbox layout for @uiw markdown preview */

@@ -163,6 +163,7 @@ export default function BoardsPage() {
       });
       setBoards((prev) => [board, ...prev]);
       setName('');
+      setShowCreate(false);
     } catch (err: unknown) {
       if (isUnauthorizedError(err)) {
         router.push('/auth/login');
@@ -405,12 +406,13 @@ export default function BoardsPage() {
           <div className="grid h-full grid-rows-3 content-start gap-3 md:grid-cols-2 xl:grid-cols-3">
             {pagedBoards.map((board) => {
               const description = (board.description ?? '').trim();
+              const boardHref = board.folder_id ? `/boards/${board.id}?folderId=${board.folder_id}` : `/boards/${board.id}`;
               return (
                 <div
                   key={board.id}
-                  className="relative flex h-full min-h-0 flex-col overflow-visible rounded-2xl border border-border bg-card p-3.5 text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent/30 hover:shadow-md"
+                  className="relative flex h-full min-h-0 flex-col overflow-visible rounded-2xl border border-border bg-card p-3.5 text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-accent hover:shadow-md"
                 >
-                  <Link href={`/boards/${board.id}`} className="block flex-1">
+                  <Link href={boardHref} className="block flex-1">
                     <div className="truncate text-sm font-semibold text-card-foreground">{board.name}</div>
                     {description && (
                       <div
@@ -426,7 +428,7 @@ export default function BoardsPage() {
                     )}
                   </Link>
                   <div className="mt-1.5 flex items-end justify-between gap-2">
-                    <Link href={`/boards/${board.id}`} className="min-w-0 flex-1">
+                    <Link href={boardHref} className="min-w-0 flex-1">
                       <div className="text-xs text-muted-foreground">Cards: {board.card_count ?? 0}</div>
                       {(board.tags?.length ?? 0) > 0 && (
                         <div className="mt-2 flex flex-wrap gap-2">

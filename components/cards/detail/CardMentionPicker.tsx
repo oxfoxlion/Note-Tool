@@ -8,6 +8,7 @@ type CardMentionPickerProps = {
   cards: Card[];
   currentCardId: number;
   query: string;
+  spaceNameById?: Record<number, string>;
   position: { top: number; left: number };
   menuRef: RefObject<HTMLDivElement | null>;
   onSelect: (item: Card) => void;
@@ -18,6 +19,7 @@ export default function CardMentionPicker({
   cards,
   currentCardId,
   query,
+  spaceNameById = {},
   position,
   menuRef,
   onSelect,
@@ -47,7 +49,9 @@ export default function CardMentionPicker({
             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-popover-foreground transition hover:bg-accent hover:text-accent-foreground"
           >
             <span className="truncate">{item.title}</span>
-            <span className="text-xs text-muted-foreground">#{item.id}</span>
+            <span className="text-xs text-muted-foreground">
+              {spaceNameById[item.space_id ?? -1] ?? 'Unknown space'}
+            </span>
           </button>
         ))}
         {cards.filter((item) => item.id !== currentCardId).length === 0 && (

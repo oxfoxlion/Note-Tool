@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import MDEditor from '@uiw/react-md-editor';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
+import { getCards, getSpaces, Space } from '../lib/noteToolApi';
 import type { Card } from '../lib/noteToolApi';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
@@ -16,7 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 type CardCreateOverlayProps = {
   mode: 'modal' | 'sidepanel';
   onClose: () => void;
-  onCreate: (payload: { title: string; content: string }) => Promise<void> | void;
+  onCreate: (payload: { title: string; content: string; tags: string[] }) => Promise<void> | void;
   allCards?: Card[];
 };
 
@@ -39,6 +40,7 @@ export default function CardCreateOverlay({
 }: CardCreateOverlayProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
@@ -46,6 +48,65 @@ export default function CardCreateOverlay({
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [showMentions, setShowMentions] = useState(false);
+  const [globalCards, setGlobalCards] = useState<Card[]>([]);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const loadGlobalCards = async () => {
+      try {
+        const cards = await getCards(null, { includeAll: true });
+        if (!active) return;
+        setGlobalCards(cards);
+      } catch {
+        if (!active) return;
+      }
+    };
+    void loadGlobalCards();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadSpaces = async () => {
+      try {
+        const data = await getSpaces();
+        if (!active) return;
+        setSpaces(data);
+      } catch {
+        if (!active) return;
+      }
+    };
+    void loadSpaces();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const mergedCards = useMemo(() => {
+    const merged = new Map<number, Card>();
+    allCards.forEach((item) => merged.set(item.id, item));
+    globalCards.forEach((item) => merged.set(item.id, item));
+    return Array.from(merged.values());
+  }, [allCards, globalCards]);
+
+  const spaceNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    spaces.forEach((space) => map.set(space.id, space.name));
+    return map;
+  }, [spaces]);
+
+  const normalizeTags = (raw: string) =>
+    Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0)
+      )
+    );
 
   const wrapSelection = (before: string, after: string = before) => {
     const el = editorRef.current;
@@ -434,7 +495,11 @@ export default function CardCreateOverlay({
     setError('');
     setIsSaving(true);
     try {
-      await onCreate({ title: title.trim(), content: content.trim() });
+      await onCreate({
+        title: title.trim(),
+        content: content.trim(),
+        tags: normalizeTags(tagsInput),
+      });
       onClose();
     } finally {
       setIsSaving(false);
@@ -520,7 +585,7 @@ export default function CardCreateOverlay({
                       Link card
                     </div>
                     <div className="max-h-52 overflow-y-auto p-2">
-                      {allCards
+                      {mergedCards
                         .filter((item) => item.title)
                         .filter((item) =>
                           mentionQuery ? item.title.toLowerCase().includes(mentionQuery.toLowerCase()) : true
@@ -552,16 +617,24 @@ export default function CardCreateOverlay({
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-popover-foreground transition hover:bg-accent hover:text-accent-foreground"
                           >
                             <span className="truncate">{item.title}</span>
-                            <span className="text-xs text-muted-foreground">#{item.id}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {spaceNameById.get(item.space_id ?? -1) ?? 'Unknown space'}
+                            </span>
                           </button>
                         ))}
-                      {allCards.length === 0 && (
+                      {mergedCards.length === 0 && (
                         <div className="px-3 py-2 text-xs text-muted-foreground">No cards available.</div>
                       )}
                     </div>
                   </div>
                 )}
               </div>
+              <Input
+                value={tagsInput}
+                onChange={(event) => setTagsInput(event.target.value)}
+                className="w-full rounded-xl px-4 py-2 text-sm"
+                placeholder="Tags (comma separated)"
+              />
             </div>
           )}
           <div className="flex items-center justify-between">

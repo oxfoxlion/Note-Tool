@@ -16,6 +16,7 @@ type CardEditorPaneProps = {
   mentionCards: Card[];
   mentionCurrentCardId: number;
   mentionQuery: string;
+  mentionSpaceNameById?: Record<number, string>;
   mentionPosition: { top: number; left: number };
   mentionMenuRef: RefObject<HTMLDivElement | null>;
   onMentionSelect: (item: Card) => void;
@@ -32,6 +33,7 @@ export default function CardEditorPane({
   mentionCards,
   mentionCurrentCardId,
   mentionQuery,
+  mentionSpaceNameById = {},
   mentionPosition,
   mentionMenuRef,
   onMentionSelect,
@@ -47,6 +49,7 @@ export default function CardEditorPane({
           cards={mentionCards}
           currentCardId={mentionCurrentCardId}
           query={mentionQuery}
+          spaceNameById={mentionSpaceNameById}
           position={mentionPosition}
           menuRef={mentionMenuRef}
           onSelect={onMentionSelect}

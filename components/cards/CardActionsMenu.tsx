@@ -37,7 +37,7 @@ export default function CardActionsMenu({
             type="button"
             variant="outline"
             size="icon"
-            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50"
+            className="h-8 w-8 rounded-full border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             aria-label="Card actions"
             title="Card actions"
           >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import { useRouter } from 'next/navigation';
 import MDEditor from '@uiw/react-md-editor';
@@ -17,7 +17,7 @@ import CardActionsMenu from './cards/CardActionsMenu';
 import CardShareLinksModal from './cards/CardShareLinksModal';
 import CardRemoveFromBoardModal from './cards/CardRemoveFromBoardModal';
 import CardCopyToSpaceModal from './cards/CardCopyToSpaceModal';
-import { copyCardToSpace, getSpaces, Space } from '../lib/noteToolApi';
+import { copyCardToSpace, getCards, getSpaces, Space } from '../lib/noteToolApi';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
@@ -29,7 +29,7 @@ type CardOverlayProps = {
   card: Card;
   mode: 'modal' | 'sidepanel';
   onClose: () => void;
-  onSave: (next: { title: string; content: string }) => Promise<void> | void;
+  onSave: (next: { title: string; content: string; tags: string[] }) => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
   onRemoveFromBoard?: (boardId: number, cardId: number) => Promise<void> | void;
   allCards?: Card[];
@@ -67,16 +67,19 @@ export default function CardOverlay({
   const [viewMode, setViewMode] = useState<'view' | 'edit'>('view');
   const [title, setTitle] = useState(card.title);
   const [content, setContent] = useState(card.content ?? '');
+  const [tagsInput, setTagsInput] = useState((card.tags ?? []).join(', '));
   const [isSaving, setIsSaving] = useState(false);
   const autosaveTimerRef = useRef<number | null>(null);
-  const lastSavedRef = useRef<{ title: string; content: string }>({
+  const lastSavedRef = useRef<{ title: string; content: string; tags: string }>({
     title: card.title,
     content: card.content ?? '',
+    tags: (card.tags ?? []).join(','),
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCardMenu, setShowCardMenu] = useState(false);
   const [showCopyToSpace, setShowCopyToSpace] = useState(false);
   const [spaces, setSpaces] = useState<Space[]>([]);
+  const [mentionSpaces, setMentionSpaces] = useState<Space[]>([]);
   const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
   const [copyError, setCopyError] = useState('');
   const [copySuccessMessage, setCopySuccessMessage] = useState('');
@@ -86,6 +89,7 @@ export default function CardOverlay({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [showMentions, setShowMentions] = useState(false);
   const { currentSpaceId } = useCurrentSpace();
+  const [globalCards, setGlobalCards] = useState<Card[]>([]);
 
   const share = useCardShare(card.id);
   const removeMembership = useCardBoardMembership(card.id);
@@ -95,13 +99,29 @@ export default function CardOverlay({
     prevCardIdRef.current = card.id;
     setTitle(card.title);
     setContent(card.content ?? '');
+    setTagsInput((card.tags ?? []).join(', '));
     setViewMode('view');
-    lastSavedRef.current = { title: card.title, content: card.content ?? '' };
+    lastSavedRef.current = {
+      title: card.title,
+      content: card.content ?? '',
+      tags: (card.tags ?? []).join(','),
+    };
     setShowMentions(false);
     setMentionQuery('');
     setMentionStart(null);
     setShowCardMenu(false);
-  }, [card.id, card.title, card.content]);
+  }, [card.id, card.title, card.content, card.tags]);
+
+  const normalizeTags = useCallback((raw: string) => {
+    return Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0)
+      )
+    );
+  }, []);
 
   useEffect(() => {
     if (!showCopyToSpace) return;
@@ -123,6 +143,50 @@ export default function CardOverlay({
   }, [showCopyToSpace]);
 
   useEffect(() => {
+    if (readOnly) {
+      setMentionSpaces([]);
+      return;
+    }
+    let active = true;
+    const loadSpaces = async () => {
+      try {
+        const data = await getSpaces();
+        if (!active) return;
+        setMentionSpaces(data);
+      } catch {
+        if (!active) return;
+      }
+    };
+    void loadSpaces();
+    return () => {
+      active = false;
+    };
+  }, [readOnly]);
+
+  useEffect(() => {
+    if (readOnly) {
+      setGlobalCards([]);
+      return;
+    }
+    let active = true;
+    const loadGlobalCards = async () => {
+      try {
+        const cards = await getCards(null, { includeAll: true });
+        if (!active) return;
+        setGlobalCards(cards);
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+          router.push('/auth/login');
+        }
+      }
+    };
+    void loadGlobalCards();
+    return () => {
+      active = false;
+    };
+  }, [readOnly, router]);
+
+  useEffect(() => {
     if (mode !== 'sidepanel') return;
     const root = document.getElementById('app-root') ?? document.documentElement;
     const media = window.matchMedia('(max-width: 1024px)');
@@ -142,15 +206,23 @@ export default function CardOverlay({
   useEffect(() => {
     if (readOnly) return;
     if (viewMode === 'view') return;
-    if (title === lastSavedRef.current.title && content === lastSavedRef.current.content) return;
+    const normalizedTags = normalizeTags(tagsInput);
+    const tagsKey = normalizedTags.join(',');
+    if (
+      title === lastSavedRef.current.title &&
+      content === lastSavedRef.current.content &&
+      tagsKey === lastSavedRef.current.tags
+    ) {
+      return;
+    }
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
     }
     autosaveTimerRef.current = window.setTimeout(() => {
       setIsSaving(true);
-      Promise.resolve(onSave({ title, content }))
+      Promise.resolve(onSave({ title, content, tags: normalizedTags }))
         .then(() => {
-          lastSavedRef.current = { title, content };
+          lastSavedRef.current = { title, content, tags: tagsKey };
         })
         .finally(() => {
           setIsSaving(false);
@@ -161,10 +233,23 @@ export default function CardOverlay({
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [title, content, viewMode, onSave, readOnly]);
+  }, [title, content, tagsInput, viewMode, onSave, readOnly, normalizeTags]);
+
+  const mergedCards = useMemo(() => {
+    const merged = new Map<number, Card>();
+    allCards.forEach((item) => merged.set(item.id, item));
+    globalCards.forEach((item) => merged.set(item.id, item));
+    return Array.from(merged.values());
+  }, [allCards, globalCards]);
+
+  const mentionSpaceNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    mentionSpaces.forEach((space) => map.set(space.id, space.name));
+    return map;
+  }, [mentionSpaces]);
 
   const linkedCards = useCardLinks({
-    allCards,
+    allCards: mergedCards,
     content,
     cardId: card.id,
     additionalLinkedIds: boardLinkedCardIds,
@@ -727,7 +812,7 @@ export default function CardOverlay({
                       Link card
                     </div>
                     <div className="max-h-52 overflow-y-auto p-2">
-                      {allCards
+                      {mergedCards
                         .filter((item) => item.id !== card.id)
                         .filter((item) => (mentionQuery ? item.title.toLowerCase().includes(mentionQuery.toLowerCase()) : true))
                         .slice(0, 8)
@@ -757,20 +842,40 @@ export default function CardOverlay({
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-popover-foreground transition hover:bg-accent hover:text-accent-foreground"
                           >
                             <span className="truncate">{item.title}</span>
-                            <span className="text-xs text-muted-foreground">#{item.id}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {mentionSpaceNameById.get(item.space_id ?? -1) ?? 'Unknown space'}
+                            </span>
                           </button>
                         ))}
-                      {allCards.filter((item) => item.id !== card.id).length === 0 && (
+                      {mergedCards.filter((item) => item.id !== card.id).length === 0 && (
                         <div className="px-3 py-2 text-xs text-muted-foreground">No cards available.</div>
                       )}
                     </div>
                   </div>
                 )}
               </div>
+              <Input
+                value={tagsInput}
+                onChange={(event) => setTagsInput(event.target.value)}
+                className="w-full text-sm"
+                placeholder="Tags (comma separated)"
+              />
               <div className="flex justify-end text-xs text-muted-foreground">{isSaving ? 'Saving…' : 'Autosave on'}</div>
             </div>
           ) : (
             <div className="space-y-6" onClickCapture={handleViewClickCapture}>
+              {(card.tags ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {(card.tags ?? []).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
               <article className="card-preview-surface prose max-w-none text-sm leading-relaxed text-card-foreground prose-headings:text-card-foreground prose-p:text-card-foreground prose-strong:text-card-foreground prose-code:text-card-foreground prose-pre:bg-muted prose-pre:text-card-foreground prose-li:text-card-foreground prose-blockquote:text-muted-foreground prose-a:text-card-foreground">
                 {renderMarkdown(content || 'No content yet.')}
               </article>

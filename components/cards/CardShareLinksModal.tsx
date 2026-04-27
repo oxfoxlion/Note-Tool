@@ -52,7 +52,7 @@ export default function CardShareLinksModal({
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-slate-600">Create a public view link for this card.</div>
+            <div className="text-sm text-muted-foreground">Create a public view link for this card.</div>
             <Button
               type="button"
               onClick={onCreate}
@@ -77,7 +77,7 @@ export default function CardShareLinksModal({
               variant="ghost"
               size="icon"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full text-slate-500 hover:text-slate-700"
+              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               title={showPassword ? 'Hide password' : 'Show password'}
             >
@@ -114,23 +114,23 @@ export default function CardShareLinksModal({
               const isRevoked = !!link.revoked_at;
               const isExpired = !!link.expires_at && new Date(link.expires_at) < new Date();
               return (
-                <div key={link.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-                  <div className="text-xs font-medium text-slate-500">{shareUrl}</div>
+                <div key={link.id} className="rounded-xl border border-border bg-muted/50 p-3">
+                  <div className="text-xs font-medium text-muted-foreground">{shareUrl}</div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-[11px]">
                       <Badge variant="outline">{link.permission}</Badge>
                       {link.password_protected && (
-                        <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-700">
+                        <Badge variant="secondary" className="border-border bg-muted text-muted-foreground">
                           password
                         </Badge>
                       )}
                       {isRevoked && (
-                        <Badge variant="secondary" className="border-rose-200 bg-rose-50 text-rose-600">
+                        <Badge variant="secondary" className="border-border bg-muted text-muted-foreground">
                           revoked
                         </Badge>
                       )}
                       {!isRevoked && isExpired && (
-                        <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-700">
+                        <Badge variant="secondary" className="border-border bg-muted text-muted-foreground">
                           expired
                         </Badge>
                       )}
@@ -151,7 +151,7 @@ export default function CardShareLinksModal({
                           onClick={() => void onRevoke(link.id)}
                           variant="outline"
                           size="sm"
-                          className="h-8 border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50"
+                          className="h-8 border-border text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                         >
                           Revoke
                         </Button>
@@ -162,7 +162,7 @@ export default function CardShareLinksModal({
               );
             })}
             {links.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                 No share links yet.
               </div>
             )}

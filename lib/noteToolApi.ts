@@ -177,6 +177,7 @@ export type Card = {
   space_id?: number;
   title: string;
   content: string | null;
+  tags?: string[];
   created_at: string;
   updated_at?: string;
   x_pos?: number;
@@ -335,18 +336,24 @@ export async function deleteSpace(spaceId: number) {
   return data as DeleteSpaceResult;
 }
 
-export async function getCards(spaceId?: number | null): Promise<Card[]> {
-  const params = spaceId ? { space_id: spaceId } : undefined;
-  const { data } = await api.get('/note_tool/card/', { headers: authHeaders(), params });
+export async function getCards(
+  spaceId?: number | null,
+  options?: { includeAll?: boolean }
+): Promise<Card[]> {
+  const params: Record<string, string | number> = {};
+  if (spaceId) params.space_id = spaceId;
+  if (options?.includeAll) params.include_all = 1;
+  const finalParams = Object.keys(params).length > 0 ? params : undefined;
+  const { data } = await api.get('/note_tool/card/', { headers: authHeaders(), params: finalParams });
   return data;
 }
 
-export async function createCard(payload: { title: string; content?: string; space_id?: number | null }) {
+export async function createCard(payload: { title: string; content?: string; tags?: string[]; space_id?: number | null }) {
   const { data } = await api.post('/note_tool/card/', payload, { headers: authHeaders() });
   return data as Card;
 }
 
-export async function updateCard(cardId: number, payload: { title: string; content?: string }) {
+export async function updateCard(cardId: number, payload: { title: string; content?: string; tags?: string[] }) {
   const { data } = await api.put(`/note_tool/card/${cardId}`, payload, { headers: authHeaders() });
   return data as Card;
 }
@@ -469,7 +476,7 @@ export async function getBoard(boardId: number) {
   return data as { board: Board; cards: Card[]; links?: BoardCardLink[] };
 }
 
-export async function createCardInBoard(boardId: number, payload: { title: string; content?: string }) {
+export async function createCardInBoard(boardId: number, payload: { title: string; content?: string; tags?: string[] }) {
   const { data } = await api.post(`/note_tool/board/${boardId}/cards`, payload, {
     headers: authHeaders(),
   });
