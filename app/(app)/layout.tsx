@@ -337,7 +337,7 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
       setNewFolderName('');
       setFolderError('');
       setShowFolderCreate(false);
-      setExpandedSpaceIds((prev) => (prev.includes(currentSpaceId) ? prev : [...prev, currentSpaceId]));
+      setIsBoardExpanded(true);
       router.push(`/boards?folderId=${created.id}`);
     } catch {
       setFolderError('Failed to create folder.');
