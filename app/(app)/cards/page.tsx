@@ -116,6 +116,7 @@ export default function CardsPage() {
   const [tableTagSaving, setTableTagSaving] = useState(false);
   const [tableTagError, setTableTagError] = useState('');
   const [tableMoveFolderOpen, setTableMoveFolderOpen] = useState(false);
+  const [tableMoveFolderMode, setTableMoveFolderMode] = useState<'single' | 'batch'>('single');
   const [tableMoveFolderValue, setTableMoveFolderValue] = useState('');
   const [tableMoveFolderSaving, setTableMoveFolderSaving] = useState(false);
   const [tableMoveFolderError, setTableMoveFolderError] = useState('');
@@ -409,20 +410,57 @@ export default function CardsPage() {
 
   const openTableMoveFolder = (card: Card) => {
     setOpenTableActionCardId(null);
+    setTableMoveFolderMode('single');
     setTableActionCard(card);
     setTableMoveFolderValue(card.folder_id ? String(card.folder_id) : '');
     setTableMoveFolderError('');
     setTableMoveFolderOpen(true);
   };
 
+  const openTableBatchMoveFolder = () => {
+    if (selectedTableCardIds.length === 0) return;
+    setTableMoveFolderMode('batch');
+    setTableActionCard(null);
+    setTableMoveFolderValue('');
+    setTableMoveFolderError('');
+    setTableMoveFolderOpen(true);
+  };
+
   const saveTableMoveFolder = async () => {
-    if (!tableActionCard) return;
+    if (tableMoveFolderMode === 'single' && !tableActionCard) return;
+    if (tableMoveFolderMode === 'batch' && selectedTableCardIds.length === 0) return;
     setTableMoveFolderSaving(true);
     setTableMoveFolderError('');
     const nextFolderId = tableMoveFolderValue ? Number(tableMoveFolderValue) : null;
     try {
-      const updated = await updateCard(tableActionCard.id, buildCardUpdatePayload(tableActionCard, { folder_id: nextFolderId }));
-      applyCardUpdateToState(updated);
+      if (tableMoveFolderMode === 'single') {
+        const updated = await updateCard(tableActionCard!.id, buildCardUpdatePayload(tableActionCard!, { folder_id: nextFolderId }));
+        applyCardUpdateToState(updated);
+      } else {
+        const selectedCards = selectedTableCardIds
+          .map((id) => allCards.find((card) => card.id === id))
+          .filter((card): card is Card => Boolean(card));
+        const results = await Promise.allSettled(
+          selectedCards.map((card) => updateCard(card.id, buildCardUpdatePayload(card, { folder_id: nextFolderId })))
+        );
+        const successfulUpdates = results
+          .filter((result): result is PromiseFulfilledResult<Card> => result.status === 'fulfilled')
+          .map((result) => result.value);
+        if (successfulUpdates.length > 0) {
+          const updatedById = new Map(successfulUpdates.map((card) => [card.id, card]));
+          const replace = (list: Card[]) => list.map((item) => updatedById.get(item.id) ?? item);
+          setCards((prev) => replace(prev));
+          setAllCards((prev) => replace(prev));
+          const failedCount = results.length - successfulUpdates.length;
+          if (failedCount > 0) {
+            setTableMoveFolderError(`Moved ${successfulUpdates.length} cards, failed ${failedCount}.`);
+            return;
+          }
+        } else {
+          setTableMoveFolderError('Failed to move selected cards.');
+          return;
+        }
+      }
       setTableMoveFolderOpen(false);
     } catch (err: unknown) {
       if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
@@ -896,6 +934,16 @@ export default function CardsPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => openTableBatchMoveFolder()}
+                disabled={isBatchDeleting || tableMoveFolderSaving}
+                className="h-8 rounded-full px-3 text-xs"
+              >
+                {`批次移動資料夾 (${selectedTableCardIds.length})`}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => void handleExportSelectedTableCardsAsZip()}
                 disabled={isBatchExporting}
                 className="h-8 rounded-full px-3 text-xs"
@@ -1302,8 +1350,12 @@ export default function CardsPage() {
       <Dialog open={tableMoveFolderOpen} onOpenChange={setTableMoveFolderOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Move folder</DialogTitle>
-            <DialogDescription>Select target card folder.</DialogDescription>
+            <DialogTitle>{tableMoveFolderMode === 'batch' ? '批次移動資料夾' : 'Move folder'}</DialogTitle>
+            <DialogDescription>
+              {tableMoveFolderMode === 'batch'
+                ? `選擇目標資料夾，將一次更新 ${selectedTableCardIds.length} 張卡片。`
+                : 'Select target card folder.'}
+            </DialogDescription>
           </DialogHeader>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

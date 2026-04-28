@@ -85,16 +85,16 @@ type LinkDraft = {
   pointerY: number;
 };
 
-const DEFAULT_REGION_COLOR = '#737373';
+const DEFAULT_REGION_COLOR = '#38bdf8';
 const REGION_COLOR_PRESETS = [
-  '#a3a3a3',
-  '#8a8a8a',
-  '#737373',
-  '#5a5a5a',
-  '#4a4a4a',
-  '#3f3f3f',
-  '#2f2f2f',
-  '#1f1f1f',
+  '#38bdf8',
+  '#22c55e',
+  '#f59e0b',
+  '#ef4444',
+  '#a855f7',
+  '#14b8a6',
+  '#f97316',
+  '#64748b',
 ];
 
 function normalizeRegionColor(color: string | null | undefined): string {

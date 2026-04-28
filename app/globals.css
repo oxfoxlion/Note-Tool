@@ -25,12 +25,76 @@
   --scrollbar-track: rgba(226, 232, 240, 0.55);
   --scrollbar-thumb: rgba(100, 116, 139, 0.42);
   --scrollbar-thumb-hover: rgba(71, 85, 105, 0.58);
-  --code-block-bg: #0f172a;
-  --code-block-fg: #e2e8f0;
-  --code-token-function: #7dd3fc;
-  --code-token-variable: #fca5a5;
-  --code-token-string: #86efac;
+  --code-block-bg: #181818;
+  --code-block-fg: #e5e5e5;
+  --code-token-function: #d4d4d4;
+  --code-token-variable: #c4c4c4;
+  --code-token-string: #b4b4b4;
+  --code-token-keyword: #d8d8d8;
+  --code-token-number: #c6c6c6;
+  --code-token-operator: #aaaaaa;
+  --code-token-comment: #8d8d8d;
+  --code-token-selector: #7ee787;
+  --code-token-tag: #7ee787;
   --radius: 0.75rem;
+}
+
+/* Unify @uiw prettylights palette for both light/dark modes */
+.wmde-markdown-var,
+[data-color-mode='light'] .wmde-markdown-var,
+.wmde-markdown-var[data-color-mode='light'],
+[data-color-mode='dark'] .wmde-markdown-var,
+.wmde-markdown-var[data-color-mode='dark'] {
+  --color-prettylights-syntax-comment: #8d8d8d !important;
+  --color-prettylights-syntax-constant: #c6c6c6 !important;
+  --color-prettylights-syntax-entity: #d4d4d4 !important;
+  --color-prettylights-syntax-storage-modifier-import: #d8d8d8 !important;
+  --color-prettylights-syntax-entity-tag: #7ee787 !important;
+  --color-prettylights-syntax-keyword: #d8d8d8 !important;
+  --color-prettylights-syntax-string: #b4b4b4 !important;
+  --color-prettylights-syntax-variable: #c4c4c4 !important;
+  --color-prettylights-syntax-string-regexp: #7ee787 !important;
+  --color-prettylights-syntax-markup-heading: #d4d4d4 !important;
+  --color-prettylights-syntax-markup-italic: #c4c4c4 !important;
+  --color-prettylights-syntax-markup-bold: #d4d4d4 !important;
+  --color-prettylights-syntax-meta-diff-range: #d4d4d4 !important;
+  --color-prettylights-syntax-constant-other-reference-link: #b4b4b4 !important;
+}
+
+[data-color-mode*='light'] .wmde-markdown-var,
+.wmde-markdown-var[data-color-mode*='light'] {
+  --color-prettylights-syntax-comment: #6e7781 !important;
+  --color-prettylights-syntax-constant: #0550ae !important;
+  --color-prettylights-syntax-entity: #8250df !important;
+  --color-prettylights-syntax-storage-modifier-import: #24292f !important;
+  --color-prettylights-syntax-entity-tag: #116329 !important;
+  --color-prettylights-syntax-keyword: #cf222e !important;
+  --color-prettylights-syntax-string: #0a3069 !important;
+  --color-prettylights-syntax-variable: #953800 !important;
+  --color-prettylights-syntax-string-regexp: #116329 !important;
+  --color-prettylights-syntax-markup-heading: #0550ae !important;
+  --color-prettylights-syntax-markup-italic: #24292f !important;
+  --color-prettylights-syntax-markup-bold: #24292f !important;
+  --color-prettylights-syntax-meta-diff-range: #8250df !important;
+  --color-prettylights-syntax-constant-other-reference-link: #0a3069 !important;
+}
+
+[data-color-mode*='dark'] .wmde-markdown-var,
+.wmde-markdown-var[data-color-mode*='dark'] {
+  --color-prettylights-syntax-comment: #8d8d8d !important;
+  --color-prettylights-syntax-constant: #c6c6c6 !important;
+  --color-prettylights-syntax-entity: #d4d4d4 !important;
+  --color-prettylights-syntax-storage-modifier-import: #d8d8d8 !important;
+  --color-prettylights-syntax-entity-tag: #7ee787 !important;
+  --color-prettylights-syntax-keyword: #d8d8d8 !important;
+  --color-prettylights-syntax-string: #b4b4b4 !important;
+  --color-prettylights-syntax-variable: #c4c4c4 !important;
+  --color-prettylights-syntax-string-regexp: #7ee787 !important;
+  --color-prettylights-syntax-markup-heading: #d4d4d4 !important;
+  --color-prettylights-syntax-markup-italic: #c4c4c4 !important;
+  --color-prettylights-syntax-markup-bold: #d4d4d4 !important;
+  --color-prettylights-syntax-meta-diff-range: #d4d4d4 !important;
+  --color-prettylights-syntax-constant-other-reference-link: #b4b4b4 !important;
 }
 
 .theme-light {
@@ -67,6 +131,17 @@
   --scrollbar-track: rgba(226, 232, 240, 0.55);
   --scrollbar-thumb: rgba(100, 116, 139, 0.42);
   --scrollbar-thumb-hover: rgba(71, 85, 105, 0.58);
+  --code-block-bg: #f3f4f6;
+  --code-block-fg: #111827;
+  --code-token-function: #0550ae;
+  --code-token-variable: #953800;
+  --code-token-string: #0a3069;
+  --code-token-keyword: #cf222e;
+  --code-token-number: #0550ae;
+  --code-token-operator: #57606a;
+  --code-token-comment: #6e7781;
+  --code-token-selector: #116329;
+  --code-token-tag: #116329;
 }
 
 .theme-dark {
@@ -108,6 +183,12 @@
   --code-token-function: #d4d4d4;
   --code-token-variable: #c4c4c4;
   --code-token-string: #b4b4b4;
+  --code-token-keyword: #d8d8d8;
+  --code-token-number: #c6c6c6;
+  --code-token-operator: #aaaaaa;
+  --code-token-comment: #8d8d8d;
+  --code-token-selector: #7ee787;
+  --code-token-tag: #7ee787;
 }
 
 @theme inline {
@@ -352,6 +433,138 @@ body {
   color: var(--code-token-string) !important;
 }
 
+.wmde-markdown pre code .token.keyword,
+.wmde-markdown pre code .token.atrule,
+.wmde-markdown pre code .hljs-keyword {
+  color: var(--code-token-keyword) !important;
+}
+
+.wmde-markdown pre code .token.number,
+.wmde-markdown pre code .token.boolean,
+.wmde-markdown pre code .hljs-number,
+.wmde-markdown pre code .hljs-literal {
+  color: var(--code-token-number) !important;
+}
+
+.wmde-markdown pre code .token.operator,
+.wmde-markdown pre code .token.punctuation,
+.wmde-markdown pre code .hljs-operator,
+.wmde-markdown pre code .hljs-punctuation {
+  color: var(--code-token-operator) !important;
+}
+
+.wmde-markdown pre code .token.comment,
+.wmde-markdown pre code .hljs-comment {
+  color: var(--code-token-comment) !important;
+}
+
+.wmde-markdown pre code .token.selector,
+.wmde-markdown pre code .hljs-selector-tag,
+.wmde-markdown pre code .hljs-selector-id,
+.wmde-markdown pre code .hljs-selector-class,
+.wmde-markdown pre code .hljs-selector-attr,
+.wmde-markdown pre code .hljs-selector-pseudo {
+  color: var(--code-token-selector) !important;
+}
+
+/* Shared code theme mapping: force light/dark to use the same token palette */
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.function,
+    .token.method,
+    .token.class-name,
+    .token.builtin,
+    .hljs-function .hljs-title,
+    .hljs-title.function_,
+    .hljs-title.function,
+    .hljs-built_in,
+    .hljs-title.class_
+  ) {
+  color: var(--code-token-function) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.variable,
+    .token.property,
+    .token.attr-name,
+    .token.constant,
+    .hljs-variable,
+    .hljs-attr,
+    .hljs-property
+  ) {
+  color: var(--code-token-variable) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.string,
+    .token.char,
+    .token.regex,
+    .hljs-string,
+    .hljs-regexp
+  ) {
+  color: var(--code-token-string) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.keyword,
+    .token.atrule,
+    .token.important,
+    .hljs-keyword
+  ) {
+  color: var(--code-token-keyword) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.number,
+    .token.boolean,
+    .token.null,
+    .hljs-number,
+    .hljs-literal
+  ) {
+  color: var(--code-token-number) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.operator,
+    .token.punctuation,
+    .hljs-operator,
+    .hljs-punctuation
+  ) {
+  color: var(--code-token-operator) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.comment,
+    .token.prolog,
+    .token.doctype,
+    .token.cdata,
+    .hljs-comment,
+    .hljs-meta
+  ) {
+  color: var(--code-token-comment) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.tag,
+    .token.entity,
+    .token.namespace,
+    .hljs-name,
+    .hljs-tag,
+    .hljs-template-tag
+  ) {
+  color: var(--code-token-tag) !important;
+}
+
+:is(.wmde-markdown pre code, .card-editor-surface .w-md-editor-text-pre) :is(
+    .token.selector,
+    .hljs-selector-tag,
+    .hljs-selector-id,
+    .hljs-selector-class,
+    .hljs-selector-attr,
+    .hljs-selector-pseudo
+  ) {
+  color: var(--code-token-selector) !important;
+}
+
 .card-editor-surface .w-md-editor,
 .card-editor-surface .w-md-editor-toolbar,
 .card-editor-surface .w-md-editor-content,
@@ -429,26 +642,35 @@ body {
 .card-editor-surface .w-md-editor-text-pre .token.keyword,
 .card-editor-surface .w-md-editor-text-pre .token.atrule,
 .card-editor-surface .w-md-editor-text-pre .hljs-keyword {
-  color: #d8d8d8 !important;
+  color: var(--code-token-keyword) !important;
 }
 
 .card-editor-surface .w-md-editor-text-pre .token.number,
 .card-editor-surface .w-md-editor-text-pre .token.boolean,
 .card-editor-surface .w-md-editor-text-pre .hljs-number,
 .card-editor-surface .w-md-editor-text-pre .hljs-literal {
-  color: #c6c6c6 !important;
+  color: var(--code-token-number) !important;
 }
 
 .card-editor-surface .w-md-editor-text-pre .token.operator,
 .card-editor-surface .w-md-editor-text-pre .token.punctuation,
 .card-editor-surface .w-md-editor-text-pre .hljs-operator,
 .card-editor-surface .w-md-editor-text-pre .hljs-punctuation {
-  color: #aaaaaa !important;
+  color: var(--code-token-operator) !important;
 }
 
 .card-editor-surface .w-md-editor-text-pre .token.comment,
 .card-editor-surface .w-md-editor-text-pre .hljs-comment {
-  color: var(--muted-foreground) !important;
+  color: var(--code-token-comment) !important;
+}
+
+.card-editor-surface .w-md-editor-text-pre .token.selector,
+.card-editor-surface .w-md-editor-text-pre .hljs-selector-tag,
+.card-editor-surface .w-md-editor-text-pre .hljs-selector-id,
+.card-editor-surface .w-md-editor-text-pre .hljs-selector-class,
+.card-editor-surface .w-md-editor-text-pre .hljs-selector-attr,
+.card-editor-surface .w-md-editor-text-pre .hljs-selector-pseudo {
+  color: var(--code-token-selector) !important;
 }
 
 /* Normalize task-list checkbox layout for @uiw markdown preview */
