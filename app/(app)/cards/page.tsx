@@ -11,13 +11,26 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { Badge } from '../../../components/ui/badge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../../components/ui/alert-dialog';
+import {
   Card,
   Board,
+  BoardFolder,
   BoardCardLink,
   createCard,
   deleteCard,
+  exportCardsAsMarkdownZip,
   getBoard,
   getBoardCardLinks,
+  getBoardFolders,
   getCardBoards,
   getBoards,
   getCards,
@@ -36,17 +49,24 @@ export default function CardsPage() {
   const [cards, setCards] = useState<Card[]>([]);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
+  const [folders, setFolders] = useState<BoardFolder[]>([]);
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedBoardLinkedCardIds, setSelectedBoardLinkedCardIds] = useState<number[]>([]);
   const [cardOpenMode, setCardOpenMode] = useState<'modal' | 'sidepanel'>('modal');
+  const [cardViewMode, setCardViewMode] = useState<'grid' | 'table'>('grid');
+  const [folderFilter, setFolderFilter] = useState<string>('');
   const [boardFilter, setBoardFilter] = useState<string>('');
   const [tagFilter, setTagFilter] = useState<string>('');
   const [error, setError] = useState('');
   const [cardPreviewLength, setCardPreviewLength] = useState(120);
   const [pageState, setPageState] = useState<{ value: number; key: string }>({ value: 1, key: '' });
+  const [selectedTableCardIds, setSelectedTableCardIds] = useState<number[]>([]);
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false);
+  const [isBatchExporting, setIsBatchExporting] = useState(false);
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const mediaMobile = window.matchMedia('(max-width: 768px)');
@@ -70,14 +90,16 @@ export default function CardsPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [cardsData, boardsData, settingsData] = await Promise.all([
+        const [cardsData, boardsData, foldersData, settingsData] = await Promise.all([
           getCards(currentSpaceId),
           getBoards(null, currentSpaceId),
+          getBoardFolders(currentSpaceId),
           getUserSettings(),
         ]);
         setCards(cardsData);
         setAllCards(cardsData);
         setBoards(boardsData);
+        setFolders(foldersData);
         if (settingsData?.cardOpenMode) {
           setCardOpenMode(settingsData.cardOpenMode);
         }
@@ -95,21 +117,63 @@ export default function CardsPage() {
     load();
   }, [router, currentSpaceId]);
 
+  const effectiveBoardFilter =
+    boardFilter &&
+    boards.some((board) => String(board.id) === boardFilter && (!folderFilter || String(board.folder_id ?? '') === folderFilter))
+      ? boardFilter
+      : '';
+
   useEffect(() => {
     const loadBoardCards = async () => {
-      if (!boardFilter) {
+      if (effectiveBoardFilter) {
+        try {
+          const data = await getBoard(Number(effectiveBoardFilter));
+          setCards(data.cards);
+          return;
+        } catch (err: unknown) {
+          if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+            router.push('/auth/login');
+            return;
+          }
+          setError('Failed to load board cards.');
+          return;
+        }
+      }
+      if (!folderFilter) {
         setCards(allCards);
         return;
       }
       try {
-        const data = await getBoard(Number(boardFilter));
-        setCards(data.cards);
-      } catch {
-        setError('Failed to load board cards.');
+        const targetBoardIds = boards
+          .filter((board) => String(board.folder_id ?? '') === folderFilter)
+          .map((board) => board.id);
+        if (targetBoardIds.length === 0) {
+          setCards([]);
+          return;
+        }
+        const boardCards = await Promise.all(targetBoardIds.map((boardId) => getBoard(boardId)));
+        const mergedById = new Map<number, Card>();
+        boardCards.forEach((boardData) => {
+          boardData.cards.forEach((card) => {
+            mergedById.set(card.id, card);
+          });
+        });
+        setCards(Array.from(mergedById.values()));
+      } catch (err: unknown) {
+        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+          router.push('/auth/login');
+          return;
+        }
+        setError('Failed to load folder cards.');
       }
     };
-    loadBoardCards();
-  }, [boardFilter, allCards]);
+    void loadBoardCards();
+  }, [effectiveBoardFilter, folderFilter, allCards, boards, router]);
+
+  const filteredBoards = useMemo(() => {
+    if (!folderFilter) return boards;
+    return boards.filter((board) => String(board.folder_id ?? '') === folderFilter);
+  }, [boards, folderFilter]);
 
   const effectiveTagFilter = useMemo(() => {
     if (!tagFilter) return '';
@@ -141,7 +205,7 @@ export default function CardsPage() {
   }, [cards]);
 
   const pageSize = isMobile ? 12 : isXl ? 9 : 6;
-  const pageResetKey = `${query}::${boardFilter}::${tagFilter}::${cards.length}::${isMobile ? 'm' : 'd'}::${isXl ? 'x' : 'n'}`;
+  const pageResetKey = `${query}::${folderFilter}::${effectiveBoardFilter}::${tagFilter}::${cards.length}::${isMobile ? 'm' : 'd'}::${isXl ? 'x' : 'n'}::${cardViewMode}`;
 
   const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
   const requestedPage = pageState.key === pageResetKey ? pageState.value : 1;
@@ -150,6 +214,10 @@ export default function CardsPage() {
     const start = (currentPage - 1) * pageSize;
     return filteredCards.slice(start, start + pageSize);
   }, [filteredCards, currentPage, pageSize]);
+
+  const pagedCardIds = useMemo(() => pagedCards.map((card) => card.id), [pagedCards]);
+  const allPagedSelected =
+    pagedCardIds.length > 0 && pagedCardIds.every((id) => selectedTableCardIds.includes(id));
 
   const handleCreate = async (payload: { title: string; content: string; tags: string[] }) => {
     setError('');
@@ -161,7 +229,7 @@ export default function CardsPage() {
     });
     const nextAll = [created, ...allCards];
     setAllCards(nextAll);
-    if (!boardFilter) {
+    if (!effectiveBoardFilter && !folderFilter) {
       setCards(nextAll);
     }
   };
@@ -185,19 +253,77 @@ export default function CardsPage() {
     setSelectedCard(null);
   };
 
+  const handleDeleteSelectedTableCards = async () => {
+    if (selectedTableCardIds.length === 0) return;
+    setShowBatchDeleteConfirm(false);
+    setError('');
+    setIsBatchDeleting(true);
+    const deletingIds = [...selectedTableCardIds];
+    const deletingSet = new Set<number>(deletingIds);
+    try {
+      await Promise.all(deletingIds.map((cardId) => deleteCard(cardId)));
+      const removeDeleted = (list: Card[]) => list.filter((item) => !deletingSet.has(item.id));
+      setCards((prev) => removeDeleted(prev));
+      setAllCards((prev) => removeDeleted(prev));
+      if (selectedCard && deletingSet.has(selectedCard.id)) {
+        setSelectedCard(null);
+        setSelectedBoardLinkedCardIds([]);
+      }
+      setSelectedTableCardIds([]);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to delete selected cards.');
+    } finally {
+      setIsBatchDeleting(false);
+    }
+  };
+
+  const handleExportSelectedTableCardsAsZip = async () => {
+    if (selectedTableCardIds.length === 0) return;
+    setError('');
+    setIsBatchExporting(true);
+    try {
+      const blob = await exportCardsAsMarkdownZip(selectedTableCardIds);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'note-tool-cards.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setError('Failed to export selected cards zip.');
+    } finally {
+      setIsBatchExporting(false);
+    }
+  };
+
   const handleRemoveFromBoardById = async (targetBoardId: number, cardId: number) => {
     await removeCardFromBoard(targetBoardId, cardId);
-    if (boardFilter && Number(boardFilter) === targetBoardId) {
+    if (effectiveBoardFilter && Number(effectiveBoardFilter) === targetBoardId) {
       setCards((prev) => prev.filter((item) => item.id !== cardId));
     }
   };
 
-  const boardTitle = boardFilter
-    ? boards.find((board) => String(board.id) === boardFilter)?.name || 'Selected board'
-    : 'All cards';
+  const boardTitle = effectiveBoardFilter
+    ? boards.find((board) => String(board.id) === effectiveBoardFilter)?.name || 'Selected board'
+    : folderFilter
+      ? `${folders.find((folder) => String(folder.id) === folderFilter)?.name || 'Selected folder'} · All cards`
+      : 'All cards';
 
   const boardFilterLabel =
-    boards.find((board) => String(board.id) === boardFilter)?.name || 'All boards';
+    filteredBoards.find((board) => String(board.id) === effectiveBoardFilter)?.name || 'All boards';
+
+  const folderFilterLabel =
+    folders.find((folder) => String(folder.id) === folderFilter)?.name || 'All folders';
 
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
     if (isMobile) return;
@@ -220,6 +346,33 @@ export default function CardsPage() {
     },
     [allCards, cards, router]
   );
+
+  const handleOpenCard = useCallback(
+    (card: Card) => {
+      if (isMobile) {
+        router.push(`/cards/${card.id}`);
+        return;
+      }
+      setSelectedCard(card);
+    },
+    [isMobile, router]
+  );
+
+  const formatCardUpdatedAt = useCallback((card: Card) => {
+    const raw = card.updated_at || card.created_at;
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('zh-TW', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, []);
+
+  useEffect(() => {
+    setSelectedTableCardIds((prev) => prev.filter((id) => filteredCards.some((card) => card.id === id)));
+  }, [filteredCards]);
 
   useEffect(() => {
     if (!selectedCard) return;
@@ -264,7 +417,9 @@ export default function CardsPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Card Box</div>
-          <div className="mt-2 min-h-[20px] text-sm font-semibold text-card-foreground">{boardFilter ? boardTitle : ''}</div>
+          <div className="mt-2 min-h-[20px] text-sm font-semibold text-card-foreground">
+            {effectiveBoardFilter || folderFilter ? boardTitle : ''}
+          </div>
         </div>
         <div className="flex w-full flex-nowrap items-center justify-end gap-1 sm:w-auto">
           {showSearch && (
@@ -314,6 +469,40 @@ export default function CardsPage() {
               </TabsList>
             </Tabs>
           )}
+          <Tabs value={cardViewMode} onValueChange={(value) => setCardViewMode(value as 'grid' | 'table')}>
+            <TabsList className="rounded-full bg-card shadow-sm">
+              <TabsTrigger value="grid" className="rounded-full px-3 text-xs">
+                Grid
+              </TabsTrigger>
+              <TabsTrigger value="table" className="rounded-full px-3 text-xs">
+                Table
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
+                <span className="truncate">{folderFilterLabel}</span>
+                <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => setFolderFilter('')} className={folderFilter === '' ? 'bg-accent' : undefined}>
+                All folders
+              </DropdownMenuItem>
+              {folders.map((folder) => (
+                <DropdownMenuItem
+                  key={folder.id}
+                  onClick={() => setFolderFilter(String(folder.id))}
+                  className={String(folder.id) === folderFilter ? 'bg-accent' : undefined}
+                >
+                  {folder.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
@@ -324,14 +513,14 @@ export default function CardsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => setBoardFilter('')} className={boardFilter === '' ? 'bg-accent' : undefined}>
+              <DropdownMenuItem onClick={() => setBoardFilter('')} className={effectiveBoardFilter === '' ? 'bg-accent' : undefined}>
                 All boards
               </DropdownMenuItem>
-              {boards.map((board) => (
+              {filteredBoards.map((board) => (
                 <DropdownMenuItem
                   key={board.id}
                   onClick={() => setBoardFilter(String(board.id))}
-                  className={String(board.id) === boardFilter ? 'bg-accent' : undefined}
+                  className={String(board.id) === effectiveBoardFilter ? 'bg-accent' : undefined}
                 >
                   {board.name}
                 </DropdownMenuItem>
@@ -367,35 +556,142 @@ export default function CardsPage() {
 
       <div className="flex items-center justify-between">
         {error ? <div className="text-xs text-rose-600">{error}</div> : <div />}
-        <Badge variant="outline" className="text-[11px] text-muted-foreground">
-          {filteredCards.length} cards
-        </Badge>
+        <div className="flex items-center gap-2">
+          {cardViewMode === 'table' && selectedTableCardIds.length > 0 && (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void handleExportSelectedTableCardsAsZip()}
+                disabled={isBatchExporting}
+                className="h-8 rounded-full px-3 text-xs"
+              >
+                {isBatchExporting ? 'Exporting...' : `匯出 zip (${selectedTableCardIds.length})`}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={() => setShowBatchDeleteConfirm(true)}
+                disabled={isBatchDeleting}
+                className="h-8 rounded-full px-3 text-xs"
+              >
+                {isBatchDeleting ? 'Deleting...' : `刪除選取 (${selectedTableCardIds.length})`}
+              </Button>
+            </>
+          )}
+          <Badge variant="outline" className="text-[11px] text-muted-foreground">
+            {filteredCards.length} cards
+          </Badge>
+        </div>
       </div>
 
       <div className="flex h-[calc(100vh-15rem)] flex-col">
         <section className={`${isMobile ? 'flex-1 overflow-y-auto' : 'h-full overflow-hidden'} pr-1`}>
-          <div
-            className={`grid gap-4 ${
-              isMobile ? 'md:grid-cols-2 xl:grid-cols-3' : 'h-full grid-rows-3 md:grid-cols-2 xl:grid-cols-3'
-            }`}
-          >
-          {pagedCards.map((card) => (
-            <div key={card.id} className={isMobile ? '' : 'h-full min-h-0 overflow-hidden'}>
-              <CardPreview
-                card={card}
-                previewLength={cardPreviewLength}
-                fillHeight={!isMobile}
-                onSelect={() => {
-                  if (isMobile) {
-                    router.push(`/cards/${card.id}`);
-                    return;
-                  }
-                  setSelectedCard(card);
-                }}
-              />
+          {cardViewMode === 'grid' ? (
+            <div
+              className={`grid gap-4 ${
+                isMobile ? 'md:grid-cols-2 xl:grid-cols-3' : 'h-full grid-rows-3 md:grid-cols-2 xl:grid-cols-3'
+              }`}
+            >
+              {pagedCards.map((card) => (
+                <div key={card.id} className={isMobile ? '' : 'h-full min-h-0 overflow-hidden'}>
+                  <CardPreview
+                    card={card}
+                    previewLength={cardPreviewLength}
+                    fillHeight={!isMobile}
+                    onSelect={() => handleOpenCard(card)}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-          </div>
+          ) : (
+            <div className="h-full overflow-auto rounded-2xl border border-border bg-card">
+              <table className="w-full min-w-[680px] border-collapse text-sm">
+                <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <tr>
+                    <th className="w-12 px-3 py-3 text-center font-medium">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border"
+                        checked={allPagedSelected}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setSelectedTableCardIds((prev) => {
+                            if (checked) {
+                              const merged = new Set<number>([...prev, ...pagedCardIds]);
+                              return Array.from(merged);
+                            }
+                            return prev.filter((id) => !pagedCardIds.includes(id));
+                          });
+                        }}
+                        aria-label="Select all cards on current page"
+                      />
+                    </th>
+                    <th className="px-4 py-3 font-medium">Title</th>
+                    <th className="px-4 py-3 font-medium">Tags</th>
+                    <th className="px-4 py-3 font-medium">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedCards.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        No cards found.
+                      </td>
+                    </tr>
+                  ) : (
+                    pagedCards.map((card) => (
+                      <tr
+                        key={card.id}
+                        onClick={() => handleOpenCard(card)}
+                        className="cursor-pointer border-t border-border/70 transition hover:bg-muted/40"
+                      >
+                        <td className="px-3 py-3 text-center align-middle">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-border"
+                            checked={selectedTableCardIds.includes(card.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setSelectedTableCardIds((prev) =>
+                                checked ? [...prev, card.id] : prev.filter((id) => id !== card.id)
+                              );
+                            }}
+                            aria-label={`Select ${card.title}`}
+                          />
+                        </td>
+                        <td className="max-w-[320px] px-4 py-3 align-middle">
+                          <div className="truncate font-medium text-card-foreground">{card.title}</div>
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex flex-wrap gap-1">
+                            {(card.tags ?? []).length === 0 ? (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            ) : (
+                              (card.tags ?? []).slice(0, 4).map((tag) => (
+                                <span
+                                  key={`${card.id}-${tag}`}
+                                  className="inline-flex items-center rounded-full border border-border/80 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+                                >
+                                  {tag}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 align-middle text-xs text-muted-foreground">
+                          {formatCardUpdatedAt(card)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
 
@@ -464,6 +760,27 @@ export default function CardsPage() {
           allCards={allCards}
         />
       )}
+
+      <AlertDialog open={showBatchDeleteConfirm} onOpenChange={setShowBatchDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>刪除選取卡片？</AlertDialogTitle>
+            <AlertDialogDescription>
+              這個操作會永久刪除 {selectedTableCardIds.length} 張卡片，且無法復原。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBatchDeleting}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void handleDeleteSelectedTableCards()}
+              disabled={isBatchDeleting}
+            >
+              {isBatchDeleting ? '刪除中...' : '確認刪除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Button
         type="button"

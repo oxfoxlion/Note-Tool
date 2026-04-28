@@ -395,6 +395,15 @@ export async function copyCardToSpace(cardId: number, spaceId: number) {
   return data as Card;
 }
 
+export async function exportCardsAsMarkdownZip(cardIds: number[]) {
+  const { data } = await api.post(
+    '/note_tool/card/export-md-zip',
+    { card_ids: cardIds },
+    { headers: authHeaders(), responseType: 'blob' }
+  );
+  return data as Blob;
+}
+
 export async function getSharedCardByToken(token: string): Promise<SharedCardPayload> {
   const { data } = await api.get(`/note_tool/card/share/${encodeURIComponent(token)}`);
   return data;
