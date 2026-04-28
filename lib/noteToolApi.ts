@@ -386,6 +386,16 @@ export async function deleteCardFolder(folderId: number) {
   return data as CardFolder;
 }
 
+export async function assignCardsFolderBatch(cardIds: number[], folderId: number | null) {
+  const payload = { card_ids: cardIds, folder_id: folderId };
+  const { data } = await api.put('/note_tool/card/folders/assign-batch', payload, { headers: authHeaders() });
+  return data as {
+    requested_count: number;
+    updated_count: number;
+    updated_cards: Card[];
+  };
+}
+
 export async function createCard(payload: {
   title: string;
   content?: string;

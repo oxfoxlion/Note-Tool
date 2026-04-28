@@ -58,6 +58,7 @@ import {
   updateCard,
   updateUserSettings,
   removeCardFromBoard,
+  assignCardsFolderBatch,
 } from '../../../lib/noteToolApi';
 import { useCurrentSpace } from '../../../hooks/useCurrentSpace';
 
@@ -123,6 +124,31 @@ export default function CardsPage() {
   const folderIdFromQuery = Number(searchParams.get('folderId'));
   const hasFolderIdFromQuery = Number.isInteger(folderIdFromQuery) && folderIdFromQuery > 0;
 
+  const normalizeCard = useCallback((card: Card): Card => {
+    const normalizedId = Number(card.id);
+    const rawFolderId = card.folder_id;
+    const normalizedFolderId =
+      rawFolderId === null || rawFolderId === undefined || String(rawFolderId).trim() === ''
+        ? null
+        : Number(rawFolderId);
+    return {
+      ...card,
+      id: Number.isFinite(normalizedId) ? normalizedId : card.id,
+      folder_id: Number.isFinite(normalizedFolderId as number) ? (normalizedFolderId as number) : null,
+    };
+  }, []);
+
+  const normalizeCards = useCallback((items: Card[]) => items.map((item) => normalizeCard(item)), [normalizeCard]);
+  const normalizeFolders = useCallback(
+    (items: CardFolder[]) =>
+      items.map((item) => ({
+        ...item,
+        id: Number(item.id),
+        space_id: item.space_id === undefined || item.space_id === null ? item.space_id : Number(item.space_id),
+      })),
+    []
+  );
+
   useEffect(() => {
     const mediaMobile = window.matchMedia('(max-width: 768px)');
     const mediaXl = window.matchMedia('(min-width: 1280px)');
@@ -151,10 +177,11 @@ export default function CardsPage() {
           getCardFolders(currentSpaceId),
           getUserSettings(),
         ]);
-        setCards(cardsData);
-        setAllCards(cardsData);
+        const normalizedCardsData = normalizeCards(cardsData);
+        setCards(normalizedCardsData);
+        setAllCards(normalizedCardsData);
         setBoards(boardsData);
-        setFolders(foldersData);
+        setFolders(normalizeFolders(foldersData));
         if (settingsData?.cardOpenMode) {
           setCardOpenMode(settingsData.cardOpenMode);
         }
@@ -170,7 +197,7 @@ export default function CardsPage() {
       }
     };
     load();
-  }, [router, currentSpaceId]);
+  }, [router, currentSpaceId, normalizeCards, normalizeFolders]);
 
   useEffect(() => {
     if (!hasFolderIdFromQuery) {
@@ -193,7 +220,7 @@ export default function CardsPage() {
       if (effectiveBoardFilter) {
         try {
           const data = await getBoard(Number(effectiveBoardFilter));
-          setCards(data.cards);
+          setCards(normalizeCards(data.cards));
           return;
         } catch (err: unknown) {
           if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
@@ -207,7 +234,7 @@ export default function CardsPage() {
       setCards(allCards);
     };
     void loadBoardCards();
-  }, [effectiveBoardFilter, allCards, router]);
+  }, [effectiveBoardFilter, allCards, router, normalizeCards]);
 
   const effectiveTagFilter = useMemo(() => {
     if (!tagFilter) return '';
@@ -265,18 +292,19 @@ export default function CardsPage() {
       folder_id: payload.folder_id,
       space_id: currentSpaceId,
     });
-    const nextAll = [created, ...allCards];
+    const normalizedCreated = normalizeCard(created);
+    const nextAll = [normalizedCreated, ...allCards];
     setAllCards(nextAll);
     if (!effectiveBoardFilter) {
-      if (!folderFilter || String(created.folder_id ?? '') === folderFilter) {
-        setCards((prev) => [created, ...prev]);
+      if (!folderFilter || String(normalizedCreated.folder_id ?? '') === folderFilter) {
+        setCards((prev) => [normalizedCreated, ...prev]);
       }
     }
   };
 
   const handleSave = async (payload: { title: string; content: string; tags: string[]; folder_id: number | null }) => {
     if (!selectedCard) return;
-    const updated = await updateCard(selectedCard.id, payload);
+    const updated = normalizeCard(await updateCard(selectedCard.id, payload));
     const updateList = (list: Card[]) =>
       list.map((item) => (item.id === updated.id ? updated : item));
     setCards((prev) => updateList(prev));
@@ -354,12 +382,14 @@ export default function CardsPage() {
   };
 
   const applyCardUpdateToState = useCallback((updated: Card) => {
-    const replace = (list: Card[]) => list.map((item) => (item.id === updated.id ? updated : item));
-    setCards((prev) => replace(prev));
-    setAllCards((prev) => replace(prev));
-    setSelectedCard((prev) => (prev && prev.id === updated.id ? updated : prev));
-    setTableActionCard((prev) => (prev && prev.id === updated.id ? updated : prev));
-  }, []);
+    const normalizedUpdated = normalizeCard(updated);
+    const normalizedReplace = (list: Card[]) =>
+      list.map((item) => (Number(item.id) === Number(normalizedUpdated.id) ? normalizedUpdated : item));
+    setCards((prev) => normalizedReplace(prev));
+    setAllCards((prev) => normalizedReplace(prev));
+    setSelectedCard((prev) => (prev && Number(prev.id) === Number(normalizedUpdated.id) ? normalizedUpdated : prev));
+    setTableActionCard((prev) => (prev && Number(prev.id) === Number(normalizedUpdated.id) ? normalizedUpdated : prev));
+  }, [normalizeCard]);
 
   const buildCardUpdatePayload = useCallback(
     (card: Card, patch: { tags?: string[]; folder_id?: number | null }) => ({
@@ -437,27 +467,19 @@ export default function CardsPage() {
         const updated = await updateCard(tableActionCard!.id, buildCardUpdatePayload(tableActionCard!, { folder_id: nextFolderId }));
         applyCardUpdateToState(updated);
       } else {
-        const selectedCards = selectedTableCardIds
-          .map((id) => allCards.find((card) => card.id === id))
-          .filter((card): card is Card => Boolean(card));
-        const results = await Promise.allSettled(
-          selectedCards.map((card) => updateCard(card.id, buildCardUpdatePayload(card, { folder_id: nextFolderId })))
-        );
-        const successfulUpdates = results
-          .filter((result): result is PromiseFulfilledResult<Card> => result.status === 'fulfilled')
-          .map((result) => result.value);
-        if (successfulUpdates.length > 0) {
-          const updatedById = new Map(successfulUpdates.map((card) => [card.id, card]));
-          const replace = (list: Card[]) => list.map((item) => updatedById.get(item.id) ?? item);
-          setCards((prev) => replace(prev));
-          setAllCards((prev) => replace(prev));
-          const failedCount = results.length - successfulUpdates.length;
-          if (failedCount > 0) {
-            setTableMoveFolderError(`Moved ${successfulUpdates.length} cards, failed ${failedCount}.`);
-            return;
-          }
-        } else {
+        const result = await assignCardsFolderBatch(selectedTableCardIds, nextFolderId);
+        if ((result.updated_count ?? 0) === 0) {
           setTableMoveFolderError('Failed to move selected cards.');
+          return;
+        }
+        const latestCards = normalizeCards(await getCards(currentSpaceId));
+        setAllCards(latestCards);
+        if (!effectiveBoardFilter) {
+          setCards(latestCards);
+        }
+        if (result.updated_count < result.requested_count) {
+          const failedCount = result.requested_count - result.updated_count;
+          setTableMoveFolderError(`Moved ${result.updated_count} cards, failed ${failedCount}.`);
           return;
         }
       }
@@ -467,7 +489,8 @@ export default function CardsPage() {
         router.push('/auth/login');
         return;
       }
-      setTableMoveFolderError('Failed to move card folder.');
+      const backendMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setTableMoveFolderError(backendMessage || 'Failed to move card folder.');
     } finally {
       setTableMoveFolderSaving(false);
     }
@@ -1051,7 +1074,9 @@ export default function CardsPage() {
                         </td>
                         <td className="max-w-[220px] px-4 py-3 align-middle">
                           <div className="truncate text-xs text-muted-foreground">
-                            {card.folder_id ? folders.find((folder) => folder.id === card.folder_id)?.name ?? '-' : '-'}
+                            {card.folder_id
+                              ? folders.find((folder) => Number(folder.id) === Number(card.folder_id))?.name ?? '-'
+                              : '-'}
                           </div>
                         </td>
                         <td className="px-4 py-3 align-middle">
