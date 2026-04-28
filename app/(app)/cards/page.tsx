@@ -25,6 +25,14 @@ import {
   AlertDialogTitle,
 } from '../../../components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../components/ui/dialog';
+import {
   Card,
   CardFolder,
   Board,
@@ -92,10 +100,25 @@ export default function CardsPage() {
   const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
   const [copyError, setCopyError] = useState('');
   const [copySuccessMessage, setCopySuccessMessage] = useState('');
+  const [tableBatchCopyOpen, setTableBatchCopyOpen] = useState(false);
+  const [copyFolderPickOpen, setCopyFolderPickOpen] = useState(false);
+  const [copyTargetMode, setCopyTargetMode] = useState<'single' | 'batch' | null>(null);
+  const [copyTargetSpace, setCopyTargetSpace] = useState<Space | null>(null);
+  const [copyTargetFolders, setCopyTargetFolders] = useState<CardFolder[]>([]);
+  const [copyTargetFolderValue, setCopyTargetFolderValue] = useState('');
   const [tableRemoveOpen, setTableRemoveOpen] = useState(false);
   const [tableRemoveBoards, setTableRemoveBoards] = useState<BoardSummary[]>([]);
   const [tableRemoveBusyBoardId, setTableRemoveBusyBoardId] = useState<number | null>(null);
   const [tableRemoveError, setTableRemoveError] = useState('');
+  const [tableTagOpen, setTableTagOpen] = useState(false);
+  const [tableSelectedTags, setTableSelectedTags] = useState<string[]>([]);
+  const [tableNewTagInput, setTableNewTagInput] = useState('');
+  const [tableTagSaving, setTableTagSaving] = useState(false);
+  const [tableTagError, setTableTagError] = useState('');
+  const [tableMoveFolderOpen, setTableMoveFolderOpen] = useState(false);
+  const [tableMoveFolderValue, setTableMoveFolderValue] = useState('');
+  const [tableMoveFolderSaving, setTableMoveFolderSaving] = useState(false);
+  const [tableMoveFolderError, setTableMoveFolderError] = useState('');
   const folderIdFromQuery = Number(searchParams.get('folderId'));
   const hasFolderIdFromQuery = Number.isInteger(folderIdFromQuery) && folderIdFromQuery > 0;
 
@@ -329,6 +352,89 @@ export default function CardsPage() {
     }
   };
 
+  const applyCardUpdateToState = useCallback((updated: Card) => {
+    const replace = (list: Card[]) => list.map((item) => (item.id === updated.id ? updated : item));
+    setCards((prev) => replace(prev));
+    setAllCards((prev) => replace(prev));
+    setSelectedCard((prev) => (prev && prev.id === updated.id ? updated : prev));
+    setTableActionCard((prev) => (prev && prev.id === updated.id ? updated : prev));
+  }, []);
+
+  const buildCardUpdatePayload = useCallback(
+    (card: Card, patch: { tags?: string[]; folder_id?: number | null }) => ({
+      title: card.title,
+      content: card.content ?? '',
+      tags: patch.tags ?? card.tags ?? [],
+      folder_id: patch.folder_id !== undefined ? patch.folder_id : (card.folder_id ?? null),
+    }),
+    []
+  );
+
+  const openTableTagEditor = (card: Card) => {
+    setOpenTableActionCardId(null);
+    setTableActionCard(card);
+    setTableSelectedTags(card.tags ?? []);
+    setTableNewTagInput('');
+    setTableTagError('');
+    setTableTagOpen(true);
+  };
+
+  const toggleTableTag = (tag: string) => {
+    setTableSelectedTags((prev) => (prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]));
+  };
+
+  const saveTableTags = async () => {
+    if (!tableActionCard) return;
+    setTableTagSaving(true);
+    setTableTagError('');
+    const extraTags = tableNewTagInput
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const nextTags = Array.from(new Set([...tableSelectedTags, ...extraTags]));
+    try {
+      const updated = await updateCard(tableActionCard.id, buildCardUpdatePayload(tableActionCard, { tags: nextTags }));
+      applyCardUpdateToState(updated);
+      setTableTagOpen(false);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableTagError('Failed to update tags.');
+    } finally {
+      setTableTagSaving(false);
+    }
+  };
+
+  const openTableMoveFolder = (card: Card) => {
+    setOpenTableActionCardId(null);
+    setTableActionCard(card);
+    setTableMoveFolderValue(card.folder_id ? String(card.folder_id) : '');
+    setTableMoveFolderError('');
+    setTableMoveFolderOpen(true);
+  };
+
+  const saveTableMoveFolder = async () => {
+    if (!tableActionCard) return;
+    setTableMoveFolderSaving(true);
+    setTableMoveFolderError('');
+    const nextFolderId = tableMoveFolderValue ? Number(tableMoveFolderValue) : null;
+    try {
+      const updated = await updateCard(tableActionCard.id, buildCardUpdatePayload(tableActionCard, { folder_id: nextFolderId }));
+      applyCardUpdateToState(updated);
+      setTableMoveFolderOpen(false);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableMoveFolderError('Failed to move card folder.');
+    } finally {
+      setTableMoveFolderSaving(false);
+    }
+  };
+
   const boardTitle = effectiveBoardFilter
     ? boards.find((board) => String(board.id) === effectiveBoardFilter)?.name || 'Selected board'
     : folderFilter
@@ -471,20 +577,93 @@ export default function CardsPage() {
     }
   };
 
-  const handleTableCopyToSpace = async (targetSpaceId: number) => {
-    if (!tableActionCard) return;
+  const openTableBatchCopy = async () => {
+    if (selectedTableCardIds.length === 0) return;
     setCopyError('');
     setCopySuccessMessage('');
-    setCopyBusySpaceId(targetSpaceId);
     try {
-      const copied = await copyCardToSpace(tableActionCard.id, targetSpaceId);
-      setCopySuccessMessage(`Copied as card #${copied.id}.`);
+      const data = await getSpaces();
+      setSpaces(data);
+      setTableBatchCopyOpen(true);
     } catch (err: unknown) {
       if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
         router.push('/auth/login');
         return;
       }
-      setCopyError('Failed to copy card.');
+      setCopyError('Failed to load spaces.');
+      setTableBatchCopyOpen(true);
+    }
+  };
+
+  const openCopyFolderPicker = async (targetSpaceId: number, mode: 'single' | 'batch') => {
+    setCopyError('');
+    setCopySuccessMessage('');
+    try {
+      const target = spaces.find((space) => space.id === targetSpaceId) ?? null;
+      const targetFolders = await getCardFolders(targetSpaceId);
+      setCopyTargetMode(mode);
+      setCopyTargetSpace(target);
+      setCopyTargetFolders(targetFolders);
+      setCopyTargetFolderValue('');
+      setTableCopyOpen(false);
+      setTableBatchCopyOpen(false);
+      setCopyFolderPickOpen(true);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setCopyError('Failed to load target folders.');
+    }
+  };
+
+  const applyFolderToCopiedCard = async (card: Card, targetFolderId: number | null) => {
+    if (!targetFolderId) return;
+    await updateCard(card.id, {
+      title: card.title,
+      content: card.content ?? '',
+      tags: card.tags ?? [],
+      folder_id: targetFolderId,
+    });
+  };
+
+  const confirmCopyToTargetFolder = async () => {
+    if (!copyTargetSpace || !copyTargetMode) return;
+    const targetSpaceId = copyTargetSpace.id;
+    const targetFolderId = copyTargetFolderValue ? Number(copyTargetFolderValue) : null;
+    setCopyError('');
+    setCopySuccessMessage('');
+    setCopyBusySpaceId(targetSpaceId);
+    try {
+      if (copyTargetMode === 'single') {
+        if (!tableActionCard) return;
+        const copied = await copyCardToSpace(tableActionCard.id, targetSpaceId);
+        await applyFolderToCopiedCard(copied, targetFolderId);
+        setCopySuccessMessage(`Copied as card #${copied.id}.`);
+      } else {
+        if (selectedTableCardIds.length === 0) return;
+        const results = await Promise.allSettled(
+          selectedTableCardIds.map(async (cardId) => {
+            const copied = await copyCardToSpace(cardId, targetSpaceId);
+            await applyFolderToCopiedCard(copied, targetFolderId);
+          })
+        );
+        const successCount = results.filter((result) => result.status === 'fulfilled').length;
+        const failedCount = results.length - successCount;
+        if (successCount > 0) {
+          setCopySuccessMessage(`Copied ${successCount} cards.`);
+        }
+        if (failedCount > 0) {
+          setCopyError(`Failed to copy ${failedCount} cards.`);
+        }
+      }
+      setCopyFolderPickOpen(false);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setCopyError('Failed to copy card(s).');
     } finally {
       setCopyBusySpaceId(null);
     }
@@ -708,6 +887,15 @@ export default function CardsPage() {
                 type="button"
                 size="sm"
                 variant="outline"
+                onClick={() => void openTableBatchCopy()}
+                className="h-8 rounded-full px-3 text-xs"
+              >
+                {`複製到 Space (${selectedTableCardIds.length})`}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
                 onClick={() => void handleExportSelectedTableCardsAsZip()}
                 disabled={isBatchExporting}
                 className="h-8 rounded-full px-3 text-xs"
@@ -775,6 +963,7 @@ export default function CardsPage() {
                       />
                     </th>
                     <th className="px-4 py-3 font-medium">Title</th>
+                    <th className="px-4 py-3 font-medium">Folder</th>
                     <th className="px-4 py-3 font-medium">Tags</th>
                     <th className="px-4 py-3 font-medium">Updated</th>
                     <th className="w-14 px-3 py-3 text-right font-medium">...</th>
@@ -783,7 +972,7 @@ export default function CardsPage() {
                 <tbody>
                   {pagedCards.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
                         No cards found.
                       </td>
                     </tr>
@@ -811,6 +1000,11 @@ export default function CardsPage() {
                         </td>
                         <td className="max-w-[320px] px-4 py-3 align-middle">
                           <div className="truncate font-medium text-card-foreground">{card.title}</div>
+                        </td>
+                        <td className="max-w-[220px] px-4 py-3 align-middle">
+                          <div className="truncate text-xs text-muted-foreground">
+                            {card.folder_id ? folders.find((folder) => folder.id === card.folder_id)?.name ?? '-' : '-'}
+                          </div>
                         </td>
                         <td className="px-4 py-3 align-middle">
                           <div className="flex flex-wrap gap-1">
@@ -840,6 +1034,8 @@ export default function CardsPage() {
                               actions={[
                                 { id: 'share', label: 'Share card', onClick: () => void openTableShare(card) },
                                 { id: 'copy', label: 'Copy to space', onClick: () => void openTableCopy(card) },
+                                { id: 'edit-tags', label: 'Edit tags', onClick: () => openTableTagEditor(card) },
+                                { id: 'move-folder', label: 'Move folder', onClick: () => openTableMoveFolder(card) },
                                 { id: 'remove', label: 'Remove from board', onClick: () => void openTableRemove(card) },
                               ]}
                             />
@@ -956,8 +1152,76 @@ export default function CardsPage() {
           setCopyError('');
           setCopySuccessMessage('');
         }}
-        onCopy={handleTableCopyToSpace}
+        onCopy={(spaceId) => void openCopyFolderPicker(spaceId, 'single')}
       />
+
+      <CardCopyToSpaceModal
+        open={tableBatchCopyOpen}
+        cardTitle={`Copy ${selectedTableCardIds.length} selected cards`}
+        spaces={spaces}
+        currentSpaceId={currentSpaceId}
+        busySpaceId={copyBusySpaceId}
+        error={copyError}
+        successMessage={copySuccessMessage}
+        onClose={() => {
+          setTableBatchCopyOpen(false);
+          setCopyError('');
+          setCopySuccessMessage('');
+        }}
+        onCopy={(spaceId) => void openCopyFolderPicker(spaceId, 'batch')}
+      />
+
+      <Dialog open={copyFolderPickOpen} onOpenChange={setCopyFolderPickOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>選擇資料夾</DialogTitle>
+            <DialogDescription>
+              目標 Space：{copyTargetSpace?.name ?? '-'}。請選擇要放入的資料夾。
+            </DialogDescription>
+          </DialogHeader>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="w-full justify-between" disabled={copyBusySpaceId !== null}>
+                <span className="truncate">
+                  {copyTargetFolderValue
+                    ? copyTargetFolders.find((folder) => String(folder.id) === copyTargetFolderValue)?.name ?? 'Unknown folder'
+                    : 'No folder'}
+                </span>
+                <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[16rem]">
+              <DropdownMenuItem onClick={() => setCopyTargetFolderValue('')}>No folder</DropdownMenuItem>
+              {copyTargetFolders.map((folder) => (
+                <DropdownMenuItem key={folder.id} onClick={() => setCopyTargetFolderValue(String(folder.id))}>
+                  {folder.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {copyError ? <div className="text-xs text-rose-600">{copyError}</div> : null}
+          {copySuccessMessage ? <div className="text-xs text-emerald-600">{copySuccessMessage}</div> : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCopyFolderPickOpen(false);
+                setCopyError('');
+                setCopySuccessMessage('');
+              }}
+              disabled={copyBusySpaceId !== null}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void confirmCopyToTargetFolder()} disabled={copyBusySpaceId !== null}>
+              {copyBusySpaceId !== null ? 'Copying...' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CardRemoveFromBoardModal
         open={tableRemoveOpen}
@@ -992,6 +1256,88 @@ export default function CardsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={tableTagOpen} onOpenChange={setTableTagOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit tags</DialogTitle>
+            <DialogDescription>Select existing tags and optionally add new tags.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-40 space-y-2 overflow-auto rounded-md border border-border p-3">
+            {availableTags.length === 0 ? (
+              <div className="text-xs text-muted-foreground">No existing tags</div>
+            ) : (
+              availableTags.map((tag) => (
+                <label key={tag} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border"
+                    checked={tableSelectedTags.includes(tag)}
+                    onChange={() => toggleTableTag(tag)}
+                    disabled={tableTagSaving}
+                  />
+                  <span>{tag}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <Input
+            value={tableNewTagInput}
+            onChange={(event) => setTableNewTagInput(event.target.value)}
+            placeholder="Add new tags, comma separated"
+            disabled={tableTagSaving}
+          />
+          {tableTagError ? <div className="text-xs text-rose-600">{tableTagError}</div> : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTableTagOpen(false)} disabled={tableTagSaving}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveTableTags()} disabled={tableTagSaving}>
+              {tableTagSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tableMoveFolderOpen} onOpenChange={setTableMoveFolderOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move folder</DialogTitle>
+            <DialogDescription>Select target card folder.</DialogDescription>
+          </DialogHeader>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" className="w-full justify-between" disabled={tableMoveFolderSaving}>
+                <span className="truncate">
+                  {tableMoveFolderValue
+                    ? folders.find((folder) => String(folder.id) === tableMoveFolderValue)?.name ?? 'Unknown folder'
+                    : 'No folder'}
+                </span>
+                <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-[16rem]">
+              <DropdownMenuItem onClick={() => setTableMoveFolderValue('')}>No folder</DropdownMenuItem>
+              {folders.map((folder) => (
+                <DropdownMenuItem key={folder.id} onClick={() => setTableMoveFolderValue(String(folder.id))}>
+                  {folder.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {tableMoveFolderError ? <div className="text-xs text-rose-600">{tableMoveFolderError}</div> : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTableMoveFolderOpen(false)} disabled={tableMoveFolderSaving}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveTableMoveFolder()} disabled={tableMoveFolderSaving}>
+              {tableMoveFolderSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Button
         type="button"
