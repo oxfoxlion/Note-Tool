@@ -4,19 +4,25 @@ import Link from 'next/link';
 import type { ReactNode, CSSProperties } from 'react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Archive, LayoutGrid } from 'lucide-react';
+import { LayoutGrid, KanbanSquare, Plus } from 'lucide-react';
 import { API_BASE } from '../../lib/api';
 import {
   BoardFolder,
+  CardFolder,
   Space,
   createBoardFolder,
+  createCardFolder,
   createSpace,
+  deleteCardFolder,
   deleteBoardFolder,
   deleteSpace,
+  getCardFolders,
   getBoardFolders,
   getSpaces,
   getUserProfile,
   reorderBoardFolders,
+  reorderCardFolders,
+  updateCardFolder,
   updateSpace,
   updateBoardFolder,
 } from '../../lib/noteToolApi';
@@ -59,12 +65,7 @@ function getFolderOrderStorageKey(spaceId: number | null) {
 }
 
 function sortFoldersForUi(folders: BoardFolder[]) {
-  return [...folders].sort((a, b) => {
-    const aIsArchive = a.system_key === 'archive';
-    const bIsArchive = b.system_key === 'archive';
-    if (aIsArchive !== bIsArchive) return aIsArchive ? 1 : -1;
-    return (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id;
-  });
+  return [...folders].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id);
 }
 
 function applyStoredCustomOrder(folders: BoardFolder[], spaceId: number | null) {
@@ -76,9 +77,7 @@ function applyStoredCustomOrder(folders: BoardFolder[], spaceId: number | null) 
     if (!raw) return sortFoldersForUi(folders);
     const storedIds = JSON.parse(raw) as number[];
     if (!Array.isArray(storedIds)) return sortFoldersForUi(folders);
-    const archive = folders.find((item) => item.system_key === 'archive') ?? null;
-    const custom = folders.filter((item) => !item.is_system);
-    const byId = new Map(custom.map((item) => [item.id, item]));
+    const byId = new Map(folders.map((item) => [item.id, item]));
     const ordered = storedIds
       .map((id, index) => {
         const item = byId.get(id);
@@ -86,10 +85,10 @@ function applyStoredCustomOrder(folders: BoardFolder[], spaceId: number | null) 
         return { ...item, sort_order: index + 1 };
       })
       .filter((item): item is BoardFolder => Boolean(item));
-    const tail = custom
+    const tail = folders
       .filter((item) => !storedIds.includes(item.id))
       .map((item, index) => ({ ...item, sort_order: ordered.length + index + 1 }));
-    const merged = [...ordered, ...tail, ...(archive ? [{ ...archive, sort_order: 999999 }] : [])];
+    const merged = [...ordered, ...tail];
     return sortFoldersForUi(merged);
   } catch {
     return sortFoldersForUi(folders);
@@ -150,7 +149,9 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const [displayName, setDisplayName] = useState('User');
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [foldersBySpace, setFoldersBySpace] = useState<Record<number, BoardFolder[]>>({});
-  const [expandedSpaceIds, setExpandedSpaceIds] = useState<number[]>([]);
+  const [cardFoldersBySpace, setCardFoldersBySpace] = useState<Record<number, CardFolder[]>>({});
+  const [isCardBoxExpanded, setIsCardBoxExpanded] = useState(true);
+  const [isBoardExpanded, setIsBoardExpanded] = useState(true);
   const [openSpaceMenuId, setOpenSpaceMenuId] = useState<number | null>(null);
   const [creatingSpaceAfterId, setCreatingSpaceAfterId] = useState<number | null>(null);
   const [newSpaceName, setNewSpaceName] = useState('');
@@ -162,19 +163,26 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   const [showFolderCreate, setShowFolderCreate] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [folderError, setFolderError] = useState('');
+  const [showCardFolderCreate, setShowCardFolderCreate] = useState(false);
+  const [newCardFolderName, setNewCardFolderName] = useState('');
+  const [cardFolderError, setCardFolderError] = useState('');
   const [openFolderMenuId, setOpenFolderMenuId] = useState<number | null>(null);
+  const [openCardFolderMenuId, setOpenCardFolderMenuId] = useState<number | null>(null);
+  const [openBoardMenu, setOpenBoardMenu] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<BoardFolder | null>(null);
   const [renameFolderValue, setRenameFolderValue] = useState('');
   const [renameFolderError, setRenameFolderError] = useState('');
   const [deletingFolder, setDeletingFolder] = useState<BoardFolder | null>(null);
-  const [activeFolderIdsBySpace, setActiveFolderIdsBySpace] = useState<Record<number, number | null>>({});
+  const [, setActiveFolderIdsBySpace] = useState<Record<number, number | null>>({});
+  const [, setActiveCardFolderIdsBySpace] = useState<Record<number, number | null>>({});
   const lastFolderMutationRef = useRef(0);
   const lastSpaceRouteRef = useRef<{ href: string; spaceId: number } | null>(null);
   const selectedFolderId = Number(searchParams.get('folderId'));
   const hasSelectedFolder = Number.isInteger(selectedFolderId) && selectedFolderId > 0;
+  const isCardsPage = pathname.startsWith('/cards');
   const currentFolders = currentSpaceId ? foldersBySpace[currentSpaceId] ?? [] : [];
+  const currentCardFolders = currentSpaceId ? cardFoldersBySpace[currentSpaceId] ?? [] : [];
   const currentSpace = (currentSpaceId ? spaces.find((space) => space.id === currentSpaceId) : null) ?? spaces[0] ?? null;
-  const isCardBoxActive = Boolean(currentSpace && pathname === '/cards' && currentSpaceId === currentSpace.id);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 1024px)');
@@ -198,10 +206,14 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
         const folderEntries = await Promise.all(
           spacesData.map(async (space) => [space.id, applyStoredCustomOrder(await getBoardFolders(space.id), space.id)] as const)
         );
+        const cardFolderEntries = await Promise.all(
+          spacesData.map(async (space) => [space.id, await getCardFolders(space.id)] as const)
+        );
         if (!active) return;
         if (requestMutationVersion !== lastFolderMutationRef.current) return;
         setSpaces(spacesData);
         setFoldersBySpace(Object.fromEntries(folderEntries));
+        setCardFoldersBySpace(Object.fromEntries(cardFolderEntries));
 
         const fallbackSpace = spacesData.find((space) => space.is_default) ?? spacesData[0] ?? null;
         const nextCurrentSpaceId =
@@ -210,11 +222,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
             : fallbackSpace?.id ?? null;
         if (nextCurrentSpaceId !== currentSpaceId) {
           setCurrentSpaceId(nextCurrentSpaceId);
-        }
-        if (nextCurrentSpaceId) {
-          setExpandedSpaceIds((prev) =>
-            prev.length > 0 ? Array.from(new Set([...prev, nextCurrentSpaceId])) : [nextCurrentSpaceId]
-          );
         }
       } catch (error) {
         console.error('Failed to load sidebar:', error);
@@ -228,7 +235,8 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hasSelectedFolder) return;
-    const matchedSpaceEntry = Object.entries(foldersBySpace).find(([, folders]) =>
+    const targetMap = isCardsPage ? cardFoldersBySpace : foldersBySpace;
+    const matchedSpaceEntry = Object.entries(targetMap).find(([, folders]) =>
       folders.some((folder) => folder.id === selectedFolderId)
     );
     if (!matchedSpaceEntry) return;
@@ -241,12 +249,18 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     }
     const nextActiveFolderId = selectedFolderId;
     const timer = window.setTimeout(() => {
-      setActiveFolderIdsBySpace((prev) =>
-        prev[folderSpaceId] === nextActiveFolderId ? prev : { ...prev, [folderSpaceId]: nextActiveFolderId }
-      );
+      if (isCardsPage) {
+        setActiveCardFolderIdsBySpace((prev) =>
+          prev[folderSpaceId] === nextActiveFolderId ? prev : { ...prev, [folderSpaceId]: nextActiveFolderId }
+        );
+      } else {
+        setActiveFolderIdsBySpace((prev) =>
+          prev[folderSpaceId] === nextActiveFolderId ? prev : { ...prev, [folderSpaceId]: nextActiveFolderId }
+        );
+      }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [currentSpaceId, foldersBySpace, hasSelectedFolder, selectedFolderId, setCurrentSpaceId]);
+  }, [cardFoldersBySpace, currentSpaceId, foldersBySpace, hasSelectedFolder, isCardsPage, selectedFolderId, setCurrentSpaceId]);
 
   const updateFoldersForSpace = (spaceId: number, updater: (folders: BoardFolder[]) => BoardFolder[]) => {
     setFoldersBySpace((prev) => ({
@@ -264,9 +278,9 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     }
 
     setCurrentSpaceId(spaceId);
-    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
     setOpenSpaceMenuId(null);
     setOpenFolderMenuId(null);
+    setOpenCardFolderMenuId(null);
     setCreatingSpaceAfterId(null);
     setShowFolderCreate(false);
     if (href === '/cards') {
@@ -283,8 +297,12 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     handleSelectSpaceRoute(spaceId, nextHref, 'space-switcher');
   };
 
-  const toggleSpaceExpanded = (spaceId: number) => {
-    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev.filter((id) => id !== spaceId) : [...prev, spaceId]));
+  const handleOpenCreateSpaceFromSwitcher = () => {
+    const anchorSpaceId = currentSpace?.id ?? spaces[spaces.length - 1]?.id ?? null;
+    if (!anchorSpaceId) return;
+    setCreatingSpaceAfterId(anchorSpaceId);
+    setNewSpaceName('');
+    setSpaceError('');
   };
 
   const persistCurrentSpaceOrder = (nextSpaces: Space[]) => {
@@ -328,24 +346,13 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
 
   const handleOpenCreateFolder = (spaceId: number) => {
     setCurrentSpaceId(spaceId);
-    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
     setOpenSpaceMenuId(null);
+    setOpenCardFolderMenuId(null);
     setCreatingSpaceAfterId(null);
     setNewSpaceName('');
     setSpaceError('');
     setShowFolderCreate(true);
     setFolderError('');
-  };
-
-  const handleOpenCreateSpace = (spaceId: number) => {
-    setExpandedSpaceIds((prev) => (prev.includes(spaceId) ? prev : [...prev, spaceId]));
-    setOpenSpaceMenuId(null);
-    setShowFolderCreate(false);
-    setNewFolderName('');
-    setFolderError('');
-    setCreatingSpaceAfterId(spaceId);
-    setNewSpaceName('');
-    setSpaceError('');
   };
 
   const handleCreateSpaceBelow = async (spaceId: number) => {
@@ -366,8 +373,8 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
         return next;
       });
       setFoldersBySpace((prev) => ({ ...prev, [created.id]: [] }));
+      setCardFoldersBySpace((prev) => ({ ...prev, [created.id]: [] }));
       setCurrentSpaceId(created.id);
-      setExpandedSpaceIds((prev) => Array.from(new Set([...prev, spaceId, created.id])));
       setCreatingSpaceAfterId(null);
       setNewSpaceName('');
       setSpaceError('');
@@ -408,14 +415,16 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
         }
         return next;
       });
-      setExpandedSpaceIds((prev) => {
-        const filtered = prev.filter((id) => id !== deletedId);
-        if (currentSpaceId === deletedId && fallbackSpace?.id) {
-          return filtered.includes(fallbackSpace.id) ? filtered : [...filtered, fallbackSpace.id];
+      setCardFoldersBySpace((prev) => {
+        const next = { ...prev };
+        delete next[deletedId];
+        if (result.next_default && !next[result.next_default.id]) {
+          next[result.next_default.id] = [];
         }
-        return filtered;
+        return next;
       });
       setOpenSpaceMenuId(null);
+      setOpenCardFolderMenuId(null);
       if (currentSpaceId === deletedId) {
         setCurrentSpaceId(fallbackSpace?.id ?? null);
         router.push('/boards');
@@ -456,7 +465,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   };
 
   const handleRenameFolder = async (folder: BoardFolder, nextNameRaw: string) => {
-    if (folder.is_system) return;
     const nextName = nextNameRaw.trim();
     if (!nextName) {
       setRenameFolderError('Folder name is required.');
@@ -489,7 +497,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
   };
 
   const handleDeleteFolder = async (folder: BoardFolder) => {
-    if (folder.is_system) return;
     try {
       lastFolderMutationRef.current += 1;
       await deleteBoardFolder(folder.id);
@@ -511,36 +518,118 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
     if (!currentSpaceId) return;
     lastFolderMutationRef.current += 1;
     const current = currentFolders;
-    const customById = new Map(current.filter((item) => !item.is_system).map((item) => [item.id, item]));
-    const archive = current.find((item) => item.system_key === 'archive') ?? null;
-    const nextCustom = orderedCustomIds
+    const byId = new Map(current.map((item) => [item.id, item]));
+    const nextFolders = orderedCustomIds
       .map((id, index) => {
-        const item = customById.get(id);
+        const item = byId.get(id);
         if (!item) return null;
         return { ...item, sort_order: index + 1 };
       })
       .filter((item): item is BoardFolder => Boolean(item));
-    const optimistic = sortFoldersForUi(archive ? [...nextCustom, archive] : nextCustom);
+    const tail = current
+      .filter((item) => !orderedCustomIds.includes(item.id))
+      .map((item, index) => ({ ...item, sort_order: nextFolders.length + index + 1 }));
+    const optimistic = sortFoldersForUi([...nextFolders, ...tail]);
     updateFoldersForSpace(currentSpaceId, () => optimistic);
     saveCustomOrder(orderedCustomIds, currentSpaceId);
     try {
-      const updated = await reorderBoardFolders(orderedCustomIds, currentSpaceId);
-      updateFoldersForSpace(currentSpaceId, () => sortFoldersForUi(updated));
+      await reorderBoardFolders(orderedCustomIds, currentSpaceId);
     } catch {
       setFolderError('Order saved locally. Server sync failed.');
     }
   };
 
   const moveFolderByOffset = async (folderId: number, delta: -1 | 1) => {
-    const custom = currentFolders.filter((item) => !item.is_system);
-    const index = custom.findIndex((item) => item.id === folderId);
+    const index = currentFolders.findIndex((item) => item.id === folderId);
     if (index < 0) return;
     const nextIndex = index + delta;
-    if (nextIndex < 0 || nextIndex >= custom.length) return;
-    const ids = custom.map((item) => item.id);
+    if (nextIndex < 0 || nextIndex >= currentFolders.length) return;
+    const ids = currentFolders.map((item) => item.id);
     const [moved] = ids.splice(index, 1);
     ids.splice(nextIndex, 0, moved);
     await applyFolderOrder(ids);
+  };
+
+  const applyCardFolderOrder = async (orderedIds: number[]) => {
+    if (!currentSpaceId) return;
+    const current = currentCardFolders;
+    const byId = new Map(current.map((item) => [item.id, item]));
+    const ordered = orderedIds.map((id) => byId.get(id) ?? null).filter((item): item is CardFolder => Boolean(item));
+    const tail = current.filter((item) => !orderedIds.includes(item.id));
+    const optimistic = [...ordered, ...tail].map((item, index) => ({ ...item, sort_order: index + 1 }));
+    setCardFoldersBySpace((prev) => ({ ...prev, [currentSpaceId]: optimistic }));
+    try {
+      await reorderCardFolders(orderedIds, currentSpaceId);
+    } catch {
+      setFolderError('Failed to reorder card folders.');
+    }
+  };
+
+  const moveCardFolderByOffset = async (folderId: number, delta: -1 | 1) => {
+    const ids = currentCardFolders.map((item) => item.id);
+    const index = ids.indexOf(folderId);
+    if (index < 0) return;
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= ids.length) return;
+    const [moved] = ids.splice(index, 1);
+    ids.splice(nextIndex, 0, moved);
+    await applyCardFolderOrder(ids);
+  };
+
+  const handleCreateCardFolderInSidebar = async () => {
+    if (!currentSpaceId) return;
+    const name = newCardFolderName.trim();
+    if (!name) {
+      setCardFolderError('Folder name is required.');
+      return;
+    }
+    try {
+      const created = await createCardFolder({ name, space_id: currentSpaceId });
+      const next = [...currentCardFolders, created].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.id - b.id);
+      setCardFoldersBySpace((prev) => ({ ...prev, [currentSpaceId]: next }));
+      setActiveCardFolderIdsBySpace((prev) => ({ ...prev, [currentSpaceId]: created.id }));
+      setNewCardFolderName('');
+      setCardFolderError('');
+      setShowCardFolderCreate(false);
+      router.push(`/cards?folderId=${created.id}`);
+    } catch {
+      setCardFolderError('Failed to create card folder.');
+    }
+  };
+
+  const handleRenameCardFolderInSidebar = async (folder: CardFolder) => {
+    const raw = window.prompt('Rename folder', folder.name);
+    const name = raw?.trim() ?? '';
+    if (!name || name === folder.name) return;
+    try {
+      const updated = await updateCardFolder(folder.id, { name });
+      if (!currentSpaceId) return;
+      setCardFoldersBySpace((prev) => ({
+        ...prev,
+        [currentSpaceId]: (prev[currentSpaceId] ?? []).map((item) => (item.id === folder.id ? updated : item)),
+      }));
+    } catch {
+      setFolderError('Failed to rename card folder.');
+    }
+  };
+
+  const handleDeleteCardFolderInSidebar = async (folder: CardFolder) => {
+    const confirmed = window.confirm(`Delete folder "${folder.name}"?`);
+    if (!confirmed) return;
+    try {
+      await deleteCardFolder(folder.id);
+      if (!currentSpaceId) return;
+      setCardFoldersBySpace((prev) => ({
+        ...prev,
+        [currentSpaceId]: (prev[currentSpaceId] ?? []).filter((item) => item.id !== folder.id),
+      }));
+      setActiveCardFolderIdsBySpace((prev) => ({ ...prev, [currentSpaceId]: null }));
+      if (isCardsPage && hasSelectedFolder && selectedFolderId === folder.id) {
+        router.push('/cards');
+      }
+    } catch {
+      setFolderError('Failed to delete card folder.');
+    }
   };
 
   useEffect(() => {
@@ -712,6 +801,15 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                           </DropdownMenuItem>
                         );
                       })}
+                      <DropdownMenuItem
+                        className="mt-1 border-t border-[color:var(--sidebar-border)] pt-2 text-[11px] text-[color:var(--sidebar-muted)]"
+                        onClick={() => {
+                          handleOpenCreateSpaceFromSwitcher();
+                        }}
+                      >
+                        <Plus className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                        Add space
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -720,48 +818,16 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
               {currentSpace && (
                 <div key={currentSpace.id} className="rounded-lg">
                   <div
-                    className={cn(
-                      'flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-medium transition hover:bg-[color:var(--sidebar-hover)]',
-                      currentSpaceId === currentSpace.id && 'font-semibold'
-                    )}
+                    className="flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium"
                     style={{
-                      borderColor: 'transparent',
                       background: undefined,
                       color: 'var(--sidebar-fg)',
                     }}
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleSpaceExpanded(currentSpace.id)}
-                        className="rounded p-0.5"
-                        style={{ color: 'var(--sidebar-muted)' }}
-                        aria-label={expandedSpaceIds.includes(currentSpace.id) ? `Collapse ${currentSpace.name}` : `Expand ${currentSpace.name}`}
-                        title={expandedSpaceIds.includes(currentSpace.id) ? 'Collapse' : 'Expand'}
-                      >
-                        <svg
-                          viewBox="0 0 16 16"
-                          className={`h-3.5 w-3.5 transition ${expandedSpaceIds.includes(currentSpace.id) ? 'rotate-90' : ''}`}
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M6 3l5 5-5 5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectSpaceRoute(currentSpace.id, '/boards', 'space-name')}
-                        className="min-w-0 flex-1 text-left"
-                        title={currentSpace.name}
-                      >
-                        <span className="block truncate">{currentSpace.name}</span>
-                      </button>
+                      <span className="block truncate font-semibold" title={currentSpace.name}>
+                        {currentSpace.name}
+                      </span>
                     </div>
 
                     {!collapsed && (
@@ -798,9 +864,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                             color: 'var(--sidebar-fg)',
                           }}
                         >
-                          <DropdownMenuItem onClick={() => handleOpenCreateFolder(currentSpace.id)}>
-                            Create folder
-                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
                               setOpenSpaceMenuId(null);
@@ -810,9 +873,6 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                             }}
                           >
                             Rename space
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleOpenCreateSpace(currentSpace.id)}>
-                            Add space below
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -829,63 +889,242 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                     )}
                   </div>
 
-                  {!collapsed && expandedSpaceIds.includes(currentSpace.id) && (
-                    <div className="mt-1 space-y-1 pl-6 pr-1">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectSpaceRoute(currentSpace.id, '/cards', 'card-box')}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition hover:bg-[color:var(--sidebar-hover)]',
-                          isCardBoxActive && 'font-semibold'
-                        )}
-                        style={{
-                          background: isCardBoxActive ? 'var(--sidebar-active)' : undefined,
-                          color: 'var(--sidebar-fg)',
-                        }}
-                        title="Card Box"
-                      >
-                        <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                        <span className="truncate">Card Box</span>
-                      </button>
-
-                      <div className="mt-3 border-t border-[color:var(--sidebar-border)] pt-3" />
-                      <div className="space-y-1">
-                        {currentFolders.map((folder) => {
-                          const active =
-                            pathname.startsWith('/boards') &&
-                            (activeFolderIdsBySpace[currentSpace.id] === folder.id ||
-                              (hasSelectedFolder && selectedFolderId === folder.id));
-                          const isArchive = folder.system_key === 'archive';
-
-                          return (
-                            <div key={folder.id} className="relative">
-                              <button
-                                type="button"
-                                draggable={false}
-                                onClick={() => {
-                                  setOpenFolderMenuId(null);
-                                  setActiveFolderIdsBySpace((prev) => ({ ...prev, [currentSpace.id]: folder.id }));
-                                  handleSelectSpaceRoute(currentSpace.id, `/boards?folderId=${folder.id}`, 'folder');
-                                }}
-                                className={cn(
-                                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 pr-10 text-left text-xs transition hover:bg-[color:var(--sidebar-hover)]',
-                                  active && 'font-semibold'
-                                )}
-                                style={{
-                                  background: active ? 'var(--sidebar-active)' : undefined,
-                                  color: 'var(--sidebar-fg)',
-                                }}
+                  {!collapsed && (
+                    <div className="mt-2 space-y-2 pl-3 pr-1">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsCardBoxExpanded((prev) => !prev)}
+                          className="rounded-md p-1.5 transition hover:bg-[color:var(--sidebar-hover)]"
+                          aria-label={isCardBoxExpanded ? 'Collapse Card Box folders' : 'Expand Card Box folders'}
+                          title={isCardBoxExpanded ? 'Collapse' : 'Expand'}
+                        >
+                          <svg viewBox="0 0 16 16" className={cn('h-3.5 w-3.5 transition', isCardBoxExpanded && 'rotate-90')} aria-hidden="true">
+                            <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSpaceRoute(currentSpace.id, '/cards', 'card-box-root')}
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-semibold transition hover:bg-[color:var(--sidebar-hover)]"
+                          style={{ color: 'var(--sidebar-fg)' }}
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">Card Box</span>
+                        </button>
+                        <DropdownMenu
+                          open={openCardFolderMenuId === -1}
+                          onOpenChange={(open) => setOpenCardFolderMenuId(open ? -1 : null)}
+                        >
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full"
+                              style={{ color: 'var(--sidebar-fg)' }}
+                              title="Card Box actions"
+                              aria-label="Card Box actions"
+                            >
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                                <circle cx="5" cy="12" r="1.7" fill="currentColor" />
+                                <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                                <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                              </svg>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-44"
+                            style={{
+                              borderColor: 'var(--sidebar-border)',
+                              background: 'var(--sidebar-bg)',
+                              color: 'var(--sidebar-fg)',
+                            }}
+                          >
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setOpenCardFolderMenuId(null);
+                                setNewCardFolderName('');
+                                setCardFolderError('');
+                                setShowCardFolderCreate(true);
+                              }}
+                            >
+                              Create folder
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      {isCardBoxExpanded && (
+                        <div className="space-y-1 pl-4">
+                          {currentCardFolders.map((folder) => {
+                            const index = currentCardFolders.findIndex((item) => item.id === folder.id);
+                            const isFirst = index <= 0;
+                            const isLast = index === currentCardFolders.length - 1;
+                            return (
+                              <div key={folder.id} className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCardFolderIdsBySpace((prev) => ({ ...prev, [currentSpace.id]: folder.id }));
+                                    handleSelectSpaceRoute(currentSpace.id, `/cards?folderId=${folder.id}`, 'card-folder');
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 pr-10 text-left text-xs transition hover:bg-[color:var(--sidebar-hover)]"
+                                  style={{ color: 'var(--sidebar-fg)' }}
                                 title={folder.name}
                               >
-                                <span className="flex min-w-0 items-center gap-2">
-                                  {isArchive ? (
-                                    <Archive className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                  ) : null}
-                                  <span className="truncate">{folder.name}</span>
-                                </span>
+                                <span className="truncate">{folder.name}</span>
                               </button>
+                                <DropdownMenu
+                                  open={openCardFolderMenuId === folder.id}
+                                  onOpenChange={(open) => setOpenCardFolderMenuId(open ? folder.id : null)}
+                                >
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 rounded-full"
+                                      style={{ color: 'var(--sidebar-fg)' }}
+                                      aria-label={`Card folder actions for ${folder.name}`}
+                                      title="Folder actions"
+                                    >
+                                      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                                        <circle cx="5" cy="12" r="1.7" fill="currentColor" />
+                                        <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                                        <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                                      </svg>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    className="w-44"
+                                    style={{
+                                      borderColor: 'var(--sidebar-border)',
+                                      background: 'var(--sidebar-bg)',
+                                      color: 'var(--sidebar-fg)',
+                                    }}
+                                  >
+                                    <DropdownMenuItem
+                                      disabled={isFirst}
+                                      onClick={() => {
+                                        void moveCardFolderByOffset(folder.id, -1);
+                                      }}
+                                    >
+                                      Move up
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={isLast}
+                                      onClick={() => {
+                                        void moveCardFolderByOffset(folder.id, 1);
+                                      }}
+                                    >
+                                      Move down
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        void handleRenameCardFolderInSidebar(folder);
+                                      }}
+                                    >
+                                      Rename folder
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        void handleDeleteCardFolderInSidebar(folder);
+                                      }}
+                                      className="text-rose-400 focus:text-rose-300"
+                                    >
+                                      Delete folder
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
-                              {!folder.is_system && (
+                      <div className="mt-2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsBoardExpanded((prev) => !prev)}
+                          className="rounded-md p-1.5 transition hover:bg-[color:var(--sidebar-hover)]"
+                          aria-label={isBoardExpanded ? 'Collapse board folders' : 'Expand board folders'}
+                          title={isBoardExpanded ? 'Collapse' : 'Expand'}
+                        >
+                          <svg viewBox="0 0 16 16" className={cn('h-3.5 w-3.5 transition', isBoardExpanded && 'rotate-90')} aria-hidden="true">
+                            <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSpaceRoute(currentSpace.id, '/boards', 'board-root')}
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-semibold transition hover:bg-[color:var(--sidebar-hover)]"
+                          style={{ color: 'var(--sidebar-fg)' }}
+                        >
+                          <KanbanSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">Board</span>
+                        </button>
+                        <DropdownMenu open={openBoardMenu} onOpenChange={setOpenBoardMenu}>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded-full"
+                              style={{ color: 'var(--sidebar-fg)' }}
+                              title="Board actions"
+                              aria-label="Board actions"
+                            >
+                              <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                                <circle cx="5" cy="12" r="1.7" fill="currentColor" />
+                                <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                                <circle cx="19" cy="12" r="1.7" fill="currentColor" />
+                              </svg>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-44"
+                            style={{
+                              borderColor: 'var(--sidebar-border)',
+                              background: 'var(--sidebar-bg)',
+                              color: 'var(--sidebar-fg)',
+                            }}
+                          >
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setOpenBoardMenu(false);
+                                handleOpenCreateFolder(currentSpace.id);
+                              }}
+                            >
+                              Create folder
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      {isBoardExpanded && (
+                        <div className="space-y-1 pl-4">
+                          {currentFolders.map((folder) => {
+                            const index = currentFolders.findIndex((item) => item.id === folder.id);
+                            const isFirst = index <= 0;
+                            const isLast = index === currentFolders.length - 1;
+                            return (
+                              <div key={folder.id} className="relative">
+                                <button
+                                  type="button"
+                                  draggable={false}
+                                  onClick={() => {
+                                    setOpenFolderMenuId(null);
+                                    setActiveFolderIdsBySpace((prev) => ({ ...prev, [currentSpace.id]: folder.id }));
+                                    handleSelectSpaceRoute(currentSpace.id, `/boards?folderId=${folder.id}`, 'board-folder');
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 pr-10 text-left text-xs transition hover:bg-[color:var(--sidebar-hover)]"
+                                  style={{ color: 'var(--sidebar-fg)' }}
+                                  title={folder.name}
+                                >
+                                  <span className="truncate">{folder.name}</span>
+                                </button>
                                 <DropdownMenu
                                   open={openFolderMenuId === folder.id}
                                   onOpenChange={(open) => setOpenFolderMenuId(open ? folder.id : null)}
@@ -916,10 +1155,20 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                                       color: 'var(--sidebar-fg)',
                                     }}
                                   >
-                                    <DropdownMenuItem onClick={() => void moveFolderByOffset(folder.id, -1)}>
+                                    <DropdownMenuItem
+                                      disabled={isFirst}
+                                      onClick={() => {
+                                        void moveFolderByOffset(folder.id, -1);
+                                      }}
+                                    >
                                       Move up
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => void moveFolderByOffset(folder.id, 1)}>
+                                    <DropdownMenuItem
+                                      disabled={isLast}
+                                      onClick={() => {
+                                        void moveFolderByOffset(folder.id, 1);
+                                      }}
+                                    >
                                       Move down
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
@@ -943,11 +1192,11 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1061,6 +1310,52 @@ function AppLayoutContent({ children }: { children: ReactNode }) {
               Cancel
             </Button>
             <Button type="button" onClick={handleCreateFolder}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showCardFolderCreate}
+        onOpenChange={(open) => {
+          if (open) return;
+          setShowCardFolderCreate(false);
+          setNewCardFolderName('');
+          setCardFolderError('');
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create folder</DialogTitle>
+            <DialogDescription>Create a card folder in the selected space.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              value={newCardFolderName}
+              onChange={(event) => {
+                setNewCardFolderName(event.target.value);
+                if (cardFolderError) {
+                  setCardFolderError('');
+                }
+              }}
+              placeholder="Folder name"
+            />
+            {cardFolderError && <div className="text-xs text-rose-600">{cardFolderError}</div>}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowCardFolderCreate(false);
+                setNewCardFolderName('');
+                setCardFolderError('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleCreateCardFolderInSidebar()}>
               Create
             </Button>
           </DialogFooter>

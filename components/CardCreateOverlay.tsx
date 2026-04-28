@@ -6,7 +6,8 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import { markdownSanitizeSchema } from '../lib/markdownSanitize';
-import { getCards, getSpaces, Space } from '../lib/noteToolApi';
+import { CardFolder, getCardFolders, getCards, getSpaces, Space } from '../lib/noteToolApi';
+import { useCurrentSpace } from '../hooks/useCurrentSpace';
 import type { Card } from '../lib/noteToolApi';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
@@ -17,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 type CardCreateOverlayProps = {
   mode: 'modal' | 'sidepanel';
   onClose: () => void;
-  onCreate: (payload: { title: string; content: string; tags: string[] }) => Promise<void> | void;
+  onCreate: (payload: { title: string; content: string; tags: string[]; folder_id: number | null }) => Promise<void> | void;
   allCards?: Card[];
 };
 
@@ -38,9 +39,12 @@ export default function CardCreateOverlay({
   onCreate,
   allCards = [],
 }: CardCreateOverlayProps) {
+  const { currentSpaceId } = useCurrentSpace();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tagsInput, setTagsInput] = useState('');
+  const [folders, setFolders] = useState<CardFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
@@ -67,6 +71,24 @@ export default function CardCreateOverlay({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadFolders = async () => {
+      try {
+        const data = await getCardFolders(currentSpaceId);
+        if (!active) return;
+        setFolders(data);
+      } catch {
+        if (!active) return;
+        setFolders([]);
+      }
+    };
+    void loadFolders();
+    return () => {
+      active = false;
+    };
+  }, [currentSpaceId]);
 
   useEffect(() => {
     let active = true;
@@ -499,6 +521,7 @@ export default function CardCreateOverlay({
         title: title.trim(),
         content: content.trim(),
         tags: normalizeTags(tagsInput),
+        folder_id: selectedFolderId ? Number(selectedFolderId) : null,
       });
       onClose();
     } finally {
@@ -635,6 +658,21 @@ export default function CardCreateOverlay({
                 className="w-full rounded-xl px-4 py-2 text-sm"
                 placeholder="Tags (comma separated)"
               />
+              <label className="block text-xs text-muted-foreground">
+                Card folder
+                <select
+                  value={selectedFolderId}
+                  onChange={(event) => setSelectedFolderId(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-card-foreground"
+                >
+                  <option value="">No folder</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           )}
           <div className="flex items-center justify-between">

@@ -1,10 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import CardOverlay from '../../../components/CardOverlay';
 import CardCreateOverlay from '../../../components/CardCreateOverlay';
 import CardPreview from '../../../components/CardPreview';
+import CardActionsMenu from '../../../components/cards/CardActionsMenu';
+import CardShareLinksModal from '../../../components/cards/CardShareLinksModal';
+import CardCopyToSpaceModal from '../../../components/cards/CardCopyToSpaceModal';
+import CardRemoveFromBoardModal from '../../../components/cards/CardRemoveFromBoardModal';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/dropdown-menu';
@@ -22,18 +26,26 @@ import {
 } from '../../../components/ui/alert-dialog';
 import {
   Card,
+  CardFolder,
   Board,
-  BoardFolder,
+  BoardSummary,
   BoardCardLink,
+  CardShareLink,
+  Space,
+  copyCardToSpace,
+  createCardShareLink,
   createCard,
   deleteCard,
   exportCardsAsMarkdownZip,
   getBoard,
   getBoardCardLinks,
-  getBoardFolders,
+  getCardShareLinks,
+  getCardFolders,
   getCardBoards,
   getBoards,
   getCards,
+  getSpaces,
+  revokeCardShareLink,
   getUserSettings,
   updateCard,
   updateUserSettings,
@@ -43,13 +55,14 @@ import { useCurrentSpace } from '../../../hooks/useCurrentSpace';
 
 export default function CardsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentSpaceId } = useCurrentSpace();
   const [isMobile, setIsMobile] = useState(false);
   const [isXl, setIsXl] = useState(true);
   const [cards, setCards] = useState<Card[]>([]);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
-  const [folders, setFolders] = useState<BoardFolder[]>([]);
+  const [folders, setFolders] = useState<CardFolder[]>([]);
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
@@ -67,6 +80,24 @@ export default function CardsPage() {
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [isBatchExporting, setIsBatchExporting] = useState(false);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
+  const [openTableActionCardId, setOpenTableActionCardId] = useState<number | null>(null);
+  const [tableActionCard, setTableActionCard] = useState<Card | null>(null);
+  const [tableShareOpen, setTableShareOpen] = useState(false);
+  const [tableShareLinks, setTableShareLinks] = useState<CardShareLink[]>([]);
+  const [tableShareBusy, setTableShareBusy] = useState(false);
+  const [tableShareError, setTableShareError] = useState('');
+  const [tableSharePassword, setTableSharePassword] = useState('');
+  const [tableCopyOpen, setTableCopyOpen] = useState(false);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [copyBusySpaceId, setCopyBusySpaceId] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState('');
+  const [copySuccessMessage, setCopySuccessMessage] = useState('');
+  const [tableRemoveOpen, setTableRemoveOpen] = useState(false);
+  const [tableRemoveBoards, setTableRemoveBoards] = useState<BoardSummary[]>([]);
+  const [tableRemoveBusyBoardId, setTableRemoveBusyBoardId] = useState<number | null>(null);
+  const [tableRemoveError, setTableRemoveError] = useState('');
+  const folderIdFromQuery = Number(searchParams.get('folderId'));
+  const hasFolderIdFromQuery = Number.isInteger(folderIdFromQuery) && folderIdFromQuery > 0;
 
   useEffect(() => {
     const mediaMobile = window.matchMedia('(max-width: 768px)');
@@ -93,7 +124,7 @@ export default function CardsPage() {
         const [cardsData, boardsData, foldersData, settingsData] = await Promise.all([
           getCards(currentSpaceId),
           getBoards(null, currentSpaceId),
-          getBoardFolders(currentSpaceId),
+          getCardFolders(currentSpaceId),
           getUserSettings(),
         ]);
         setCards(cardsData);
@@ -117,11 +148,21 @@ export default function CardsPage() {
     load();
   }, [router, currentSpaceId]);
 
+  useEffect(() => {
+    if (!hasFolderIdFromQuery) {
+      if (folderFilter) {
+        setFolderFilter('');
+      }
+      return;
+    }
+    const nextFolderFilter = String(folderIdFromQuery);
+    if (nextFolderFilter !== folderFilter) {
+      setFolderFilter(nextFolderFilter);
+    }
+  }, [folderFilter, folderIdFromQuery, hasFolderIdFromQuery]);
+
   const effectiveBoardFilter =
-    boardFilter &&
-    boards.some((board) => String(board.id) === boardFilter && (!folderFilter || String(board.folder_id ?? '') === folderFilter))
-      ? boardFilter
-      : '';
+    boardFilter && boards.some((board) => String(board.id) === boardFilter) ? boardFilter : '';
 
   useEffect(() => {
     const loadBoardCards = async () => {
@@ -139,41 +180,10 @@ export default function CardsPage() {
           return;
         }
       }
-      if (!folderFilter) {
-        setCards(allCards);
-        return;
-      }
-      try {
-        const targetBoardIds = boards
-          .filter((board) => String(board.folder_id ?? '') === folderFilter)
-          .map((board) => board.id);
-        if (targetBoardIds.length === 0) {
-          setCards([]);
-          return;
-        }
-        const boardCards = await Promise.all(targetBoardIds.map((boardId) => getBoard(boardId)));
-        const mergedById = new Map<number, Card>();
-        boardCards.forEach((boardData) => {
-          boardData.cards.forEach((card) => {
-            mergedById.set(card.id, card);
-          });
-        });
-        setCards(Array.from(mergedById.values()));
-      } catch (err: unknown) {
-        if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
-          router.push('/auth/login');
-          return;
-        }
-        setError('Failed to load folder cards.');
-      }
+      setCards(allCards);
     };
     void loadBoardCards();
-  }, [effectiveBoardFilter, folderFilter, allCards, boards, router]);
-
-  const filteredBoards = useMemo(() => {
-    if (!folderFilter) return boards;
-    return boards.filter((board) => String(board.folder_id ?? '') === folderFilter);
-  }, [boards, folderFilter]);
+  }, [effectiveBoardFilter, allCards, router]);
 
   const effectiveTagFilter = useMemo(() => {
     if (!tagFilter) return '';
@@ -184,6 +194,9 @@ export default function CardsPage() {
   const filteredCards = useMemo(() => {
     const keyword = query.trim().toLowerCase();
     return cards.filter((card) => {
+      if (folderFilter && String(card.folder_id ?? '') !== folderFilter) {
+        return false;
+      }
       if (effectiveTagFilter) {
         const tags = card.tags ?? [];
         if (!tags.includes(effectiveTagFilter)) return false;
@@ -192,7 +205,7 @@ export default function CardsPage() {
       const haystack = `${card.title} ${card.content ?? ''}`.toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [cards, query, effectiveTagFilter]);
+  }, [cards, query, effectiveTagFilter, folderFilter]);
 
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
@@ -219,22 +232,25 @@ export default function CardsPage() {
   const allPagedSelected =
     pagedCardIds.length > 0 && pagedCardIds.every((id) => selectedTableCardIds.includes(id));
 
-  const handleCreate = async (payload: { title: string; content: string; tags: string[] }) => {
+  const handleCreate = async (payload: { title: string; content: string; tags: string[]; folder_id: number | null }) => {
     setError('');
     const created = await createCard({
       title: payload.title,
       content: payload.content,
       tags: payload.tags,
+      folder_id: payload.folder_id,
       space_id: currentSpaceId,
     });
     const nextAll = [created, ...allCards];
     setAllCards(nextAll);
-    if (!effectiveBoardFilter && !folderFilter) {
-      setCards(nextAll);
+    if (!effectiveBoardFilter) {
+      if (!folderFilter || String(created.folder_id ?? '') === folderFilter) {
+        setCards((prev) => [created, ...prev]);
+      }
     }
   };
 
-  const handleSave = async (payload: { title: string; content: string; tags: string[] }) => {
+  const handleSave = async (payload: { title: string; content: string; tags: string[]; folder_id: number | null }) => {
     if (!selectedCard) return;
     const updated = await updateCard(selectedCard.id, payload);
     const updateList = (list: Card[]) =>
@@ -320,10 +336,7 @@ export default function CardsPage() {
       : 'All cards';
 
   const boardFilterLabel =
-    filteredBoards.find((board) => String(board.id) === effectiveBoardFilter)?.name || 'All boards';
-
-  const folderFilterLabel =
-    folders.find((folder) => String(folder.id) === folderFilter)?.name || 'All folders';
+    boards.find((board) => String(board.id) === effectiveBoardFilter)?.name || 'All boards';
 
   const handleOpenModeChange = async (mode: 'modal' | 'sidepanel') => {
     if (isMobile) return;
@@ -357,6 +370,162 @@ export default function CardsPage() {
     },
     [isMobile, router]
   );
+
+  const toShareUrl = (token: string) => {
+    if (typeof window === 'undefined') return `/shared-card/${token}`;
+    return `${window.location.origin}/shared-card/${token}`;
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const openTableShare = async (card: Card) => {
+    setOpenTableActionCardId(null);
+    setTableActionCard(card);
+    setTableShareError('');
+    setTableShareBusy(true);
+    try {
+      const links = await getCardShareLinks(card.id);
+      setTableShareLinks(links.filter((link) => !link.revoked_at));
+      setTableShareOpen(true);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableShareError('Failed to load share links.');
+      setTableShareOpen(true);
+    } finally {
+      setTableShareBusy(false);
+    }
+  };
+
+  const createTableShareLink = async () => {
+    if (!tableActionCard) return;
+    setTableShareError('');
+    setTableShareBusy(true);
+    try {
+      const password = tableSharePassword.trim();
+      if (password && (password.length < 6 || password.length > 12)) {
+        setTableShareError('Password must be 6-12 characters.');
+        return;
+      }
+      const created = await createCardShareLink(tableActionCard.id, { permission: 'read', password: password || undefined });
+      setTableShareLinks((prev) => [created, ...prev]);
+      setTableSharePassword('');
+      const copied = await copyToClipboard(toShareUrl(created.token));
+      if (!copied) {
+        setTableShareError('Link created, but copy failed in this browser.');
+      }
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableShareError('Failed to create share link.');
+    } finally {
+      setTableShareBusy(false);
+    }
+  };
+
+  const revokeTableShareLink = async (shareLinkId: number) => {
+    if (!tableActionCard) return;
+    setTableShareError('');
+    setTableShareBusy(true);
+    try {
+      await revokeCardShareLink(tableActionCard.id, shareLinkId);
+      setTableShareLinks((prev) => prev.filter((link) => link.id !== shareLinkId));
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableShareError('Failed to revoke share link.');
+    } finally {
+      setTableShareBusy(false);
+    }
+  };
+
+  const openTableCopy = async (card: Card) => {
+    setOpenTableActionCardId(null);
+    setTableActionCard(card);
+    setCopyError('');
+    setCopySuccessMessage('');
+    try {
+      const data = await getSpaces();
+      setSpaces(data);
+      setTableCopyOpen(true);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setCopyError('Failed to load spaces.');
+      setTableCopyOpen(true);
+    }
+  };
+
+  const handleTableCopyToSpace = async (targetSpaceId: number) => {
+    if (!tableActionCard) return;
+    setCopyError('');
+    setCopySuccessMessage('');
+    setCopyBusySpaceId(targetSpaceId);
+    try {
+      const copied = await copyCardToSpace(tableActionCard.id, targetSpaceId);
+      setCopySuccessMessage(`Copied as card #${copied.id}.`);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setCopyError('Failed to copy card.');
+    } finally {
+      setCopyBusySpaceId(null);
+    }
+  };
+
+  const openTableRemove = async (card: Card) => {
+    setOpenTableActionCardId(null);
+    setTableActionCard(card);
+    setTableRemoveError('');
+    try {
+      const memberships = await getCardBoards(card.id);
+      setTableRemoveBoards(memberships);
+      setTableRemoveOpen(true);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableRemoveError('Failed to load board list.');
+      setTableRemoveOpen(true);
+    }
+  };
+
+  const handleTableRemoveFromBoard = async (boardId: number) => {
+    if (!tableActionCard) return;
+    setTableRemoveError('');
+    setTableRemoveBusyBoardId(boardId);
+    try {
+      await handleRemoveFromBoardById(boardId, tableActionCard.id);
+      setTableRemoveBoards((prev) => prev.filter((board) => board.id !== boardId));
+      setTableRemoveOpen(false);
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        router.push('/auth/login');
+        return;
+      }
+      setTableRemoveError('Failed to remove from board.');
+    } finally {
+      setTableRemoveBusyBoardId(null);
+    }
+  };
 
   const formatCardUpdatedAt = useCallback((card: Card) => {
     const raw = card.updated_at || card.created_at;
@@ -482,30 +651,6 @@ export default function CardsPage() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
-                <span className="truncate">{folderFilterLabel}</span>
-                <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
-                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-                </svg>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => setFolderFilter('')} className={folderFilter === '' ? 'bg-accent' : undefined}>
-                All folders
-              </DropdownMenuItem>
-              {folders.map((folder) => (
-                <DropdownMenuItem
-                  key={folder.id}
-                  onClick={() => setFolderFilter(String(folder.id))}
-                  className={String(folder.id) === folderFilter ? 'bg-accent' : undefined}
-                >
-                  {folder.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" className="max-w-[8.5rem] rounded-full sm:max-w-none">
                 <span className="truncate">{boardFilterLabel}</span>
                 <svg viewBox="0 0 24 24" className="ml-2 h-3.5 w-3.5" aria-hidden="true">
                   <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
@@ -516,7 +661,7 @@ export default function CardsPage() {
               <DropdownMenuItem onClick={() => setBoardFilter('')} className={effectiveBoardFilter === '' ? 'bg-accent' : undefined}>
                 All boards
               </DropdownMenuItem>
-              {filteredBoards.map((board) => (
+              {boards.map((board) => (
                 <DropdownMenuItem
                   key={board.id}
                   onClick={() => setBoardFilter(String(board.id))}
@@ -632,12 +777,13 @@ export default function CardsPage() {
                     <th className="px-4 py-3 font-medium">Title</th>
                     <th className="px-4 py-3 font-medium">Tags</th>
                     <th className="px-4 py-3 font-medium">Updated</th>
+                    <th className="w-14 px-3 py-3 text-right font-medium">...</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedCards.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
                         No cards found.
                       </td>
                     </tr>
@@ -684,6 +830,20 @@ export default function CardsPage() {
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 align-middle text-xs text-muted-foreground">
                           {formatCardUpdatedAt(card)}
+                        </td>
+                        <td className="px-3 py-3 text-right align-middle">
+                          <div onClick={(event) => event.stopPropagation()}>
+                            <CardActionsMenu
+                              open={openTableActionCardId === card.id}
+                              onToggle={() => setOpenTableActionCardId((prev) => (prev === card.id ? null : card.id))}
+                              onClose={() => setOpenTableActionCardId(null)}
+                              actions={[
+                                { id: 'share', label: 'Share card', onClick: () => void openTableShare(card) },
+                                { id: 'copy', label: 'Copy to space', onClick: () => void openTableCopy(card) },
+                                { id: 'remove', label: 'Remove from board', onClick: () => void openTableRemove(card) },
+                              ]}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -760,6 +920,57 @@ export default function CardsPage() {
           allCards={allCards}
         />
       )}
+
+      <CardShareLinksModal
+        open={tableShareOpen}
+        links={tableShareLinks}
+        busy={tableShareBusy}
+        error={tableShareError}
+        sharePassword={tableSharePassword}
+        onSharePasswordChange={setTableSharePassword}
+        toShareUrl={toShareUrl}
+        onClose={() => {
+          setTableShareOpen(false);
+          setTableShareError('');
+        }}
+        onCreate={createTableShareLink}
+        onCopy={async (url) => {
+          const copied = await copyToClipboard(url);
+          if (!copied) {
+            setTableShareError('Copy failed in this browser. Please copy manually.');
+          }
+        }}
+        onRevoke={revokeTableShareLink}
+      />
+
+      <CardCopyToSpaceModal
+        open={tableCopyOpen}
+        cardTitle={tableActionCard?.title ?? ''}
+        spaces={spaces}
+        currentSpaceId={currentSpaceId}
+        busySpaceId={copyBusySpaceId}
+        error={copyError}
+        successMessage={copySuccessMessage}
+        onClose={() => {
+          setTableCopyOpen(false);
+          setCopyError('');
+          setCopySuccessMessage('');
+        }}
+        onCopy={handleTableCopyToSpace}
+      />
+
+      <CardRemoveFromBoardModal
+        open={tableRemoveOpen}
+        cardTitle={tableActionCard?.title ?? ''}
+        boards={tableRemoveBoards}
+        busyBoardId={tableRemoveBusyBoardId}
+        error={tableRemoveError}
+        onClose={() => {
+          setTableRemoveOpen(false);
+          setTableRemoveError('');
+        }}
+        onRemove={handleTableRemoveFromBoard}
+      />
 
       <AlertDialog open={showBatchDeleteConfirm} onOpenChange={setShowBatchDeleteConfirm}>
         <AlertDialogContent>

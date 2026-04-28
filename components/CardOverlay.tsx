@@ -17,7 +17,7 @@ import CardActionsMenu from './cards/CardActionsMenu';
 import CardShareLinksModal from './cards/CardShareLinksModal';
 import CardRemoveFromBoardModal from './cards/CardRemoveFromBoardModal';
 import CardCopyToSpaceModal from './cards/CardCopyToSpaceModal';
-import { copyCardToSpace, getCards, getSpaces, Space } from '../lib/noteToolApi';
+import { CardFolder, copyCardToSpace, getCardFolders, getCards, getSpaces, Space } from '../lib/noteToolApi';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
@@ -29,7 +29,7 @@ type CardOverlayProps = {
   card: Card;
   mode: 'modal' | 'sidepanel';
   onClose: () => void;
-  onSave: (next: { title: string; content: string; tags: string[] }) => Promise<void> | void;
+  onSave: (next: { title: string; content: string; tags: string[]; folder_id: number | null }) => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
   onRemoveFromBoard?: (boardId: number, cardId: number) => Promise<void> | void;
   allCards?: Card[];
@@ -68,12 +68,15 @@ export default function CardOverlay({
   const [title, setTitle] = useState(card.title);
   const [content, setContent] = useState(card.content ?? '');
   const [tagsInput, setTagsInput] = useState((card.tags ?? []).join(', '));
+  const [folders, setFolders] = useState<CardFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>(card.folder_id ? String(card.folder_id) : '');
   const [isSaving, setIsSaving] = useState(false);
   const autosaveTimerRef = useRef<number | null>(null);
-  const lastSavedRef = useRef<{ title: string; content: string; tags: string }>({
+  const lastSavedRef = useRef<{ title: string; content: string; tags: string; folderId: string }>({
     title: card.title,
     content: card.content ?? '',
     tags: (card.tags ?? []).join(','),
+    folderId: card.folder_id ? String(card.folder_id) : '',
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCardMenu, setShowCardMenu] = useState(false);
@@ -100,17 +103,37 @@ export default function CardOverlay({
     setTitle(card.title);
     setContent(card.content ?? '');
     setTagsInput((card.tags ?? []).join(', '));
+    setSelectedFolderId(card.folder_id ? String(card.folder_id) : '');
     setViewMode('view');
     lastSavedRef.current = {
       title: card.title,
       content: card.content ?? '',
       tags: (card.tags ?? []).join(','),
+      folderId: card.folder_id ? String(card.folder_id) : '',
     };
     setShowMentions(false);
     setMentionQuery('');
     setMentionStart(null);
     setShowCardMenu(false);
-  }, [card.id, card.title, card.content, card.tags]);
+  }, [card.id, card.title, card.content, card.tags, card.folder_id]);
+
+  useEffect(() => {
+    let active = true;
+    const loadFolders = async () => {
+      try {
+        const data = await getCardFolders(currentSpaceId);
+        if (!active) return;
+        setFolders(data);
+      } catch {
+        if (!active) return;
+        setFolders([]);
+      }
+    };
+    void loadFolders();
+    return () => {
+      active = false;
+    };
+  }, [currentSpaceId]);
 
   const normalizeTags = useCallback((raw: string) => {
     return Array.from(
@@ -208,10 +231,12 @@ export default function CardOverlay({
     if (viewMode === 'view') return;
     const normalizedTags = normalizeTags(tagsInput);
     const tagsKey = normalizedTags.join(',');
+    const folderIdKey = selectedFolderId;
     if (
       title === lastSavedRef.current.title &&
       content === lastSavedRef.current.content &&
-      tagsKey === lastSavedRef.current.tags
+      tagsKey === lastSavedRef.current.tags &&
+      folderIdKey === lastSavedRef.current.folderId
     ) {
       return;
     }
@@ -220,9 +245,9 @@ export default function CardOverlay({
     }
     autosaveTimerRef.current = window.setTimeout(() => {
       setIsSaving(true);
-      Promise.resolve(onSave({ title, content, tags: normalizedTags }))
+      Promise.resolve(onSave({ title, content, tags: normalizedTags, folder_id: selectedFolderId ? Number(selectedFolderId) : null }))
         .then(() => {
-          lastSavedRef.current = { title, content, tags: tagsKey };
+          lastSavedRef.current = { title, content, tags: tagsKey, folderId: folderIdKey };
         })
         .finally(() => {
           setIsSaving(false);
@@ -233,7 +258,7 @@ export default function CardOverlay({
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [title, content, tagsInput, viewMode, onSave, readOnly, normalizeTags]);
+  }, [title, content, tagsInput, selectedFolderId, viewMode, onSave, readOnly, normalizeTags]);
 
   const mergedCards = useMemo(() => {
     const merged = new Map<number, Card>();
@@ -860,6 +885,21 @@ export default function CardOverlay({
                 className="w-full text-sm"
                 placeholder="Tags (comma separated)"
               />
+              <label className="block text-xs text-muted-foreground">
+                Card folder
+                <select
+                  value={selectedFolderId}
+                  onChange={(event) => setSelectedFolderId(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-card-foreground"
+                >
+                  <option value="">No folder</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="flex justify-end text-xs text-muted-foreground">{isSaving ? 'Saving…' : 'Autosave on'}</div>
             </div>
           ) : (

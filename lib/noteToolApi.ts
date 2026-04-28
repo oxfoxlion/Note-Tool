@@ -176,6 +176,7 @@ export type Card = {
   id: number;
   user_id: string;
   space_id?: number;
+  folder_id?: number | null;
   title: string;
   content: string | null;
   tags?: string[];
@@ -206,6 +207,15 @@ export type BoardFolder = {
   name: string;
   is_system: boolean;
   system_key: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type CardFolder = {
+  id: number;
+  user_id: string;
+  space_id?: number;
+  name: string;
   sort_order: number;
   created_at: string;
 };
@@ -349,12 +359,48 @@ export async function getCards(
   return data;
 }
 
-export async function createCard(payload: { title: string; content?: string; tags?: string[]; space_id?: number | null }) {
+export async function getCardFolders(spaceId?: number | null): Promise<CardFolder[]> {
+  const params = spaceId ? { space_id: spaceId } : undefined;
+  const { data } = await api.get('/note_tool/card/folders', { headers: authHeaders(), params });
+  return data;
+}
+
+export async function createCardFolder(payload: { name: string; space_id?: number | null }) {
+  const { data } = await api.post('/note_tool/card/folders', payload, { headers: authHeaders() });
+  return data as CardFolder;
+}
+
+export async function updateCardFolder(folderId: number, payload: { name: string }) {
+  const { data } = await api.put(`/note_tool/card/folders/${folderId}`, payload, { headers: authHeaders() });
+  return data as CardFolder;
+}
+
+export async function reorderCardFolders(folderIds: number[], spaceId?: number | null) {
+  const payload = spaceId ? { folder_ids: folderIds, space_id: spaceId } : { folder_ids: folderIds };
+  const { data } = await api.put('/note_tool/card/folders/reorder', payload, { headers: authHeaders() });
+  return data as CardFolder[];
+}
+
+export async function deleteCardFolder(folderId: number) {
+  const { data } = await api.delete(`/note_tool/card/folders/${folderId}`, { headers: authHeaders() });
+  return data as CardFolder;
+}
+
+export async function createCard(payload: {
+  title: string;
+  content?: string;
+  tags?: string[];
+  space_id?: number | null;
+  folder_id?: number | null;
+}) {
   const { data } = await api.post('/note_tool/card/', payload, { headers: authHeaders() });
   return data as Card;
 }
 
-export async function updateCard(cardId: number, payload: { title: string; content?: string; tags?: string[] }) {
+export async function updateCard(
+  cardId: number,
+  payload: { title: string; content?: string; tags?: string[]; folder_id?: number | null }
+) {
   const { data } = await api.put(`/note_tool/card/${cardId}`, payload, { headers: authHeaders() });
   return data as Card;
 }
