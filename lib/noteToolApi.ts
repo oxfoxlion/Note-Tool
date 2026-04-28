@@ -82,10 +82,11 @@ function isAccessTokenStale(token: string, leewayMs = 30_000) {
 
 function handleAuthExpired() {
   if (typeof window === 'undefined' || hasHandledAuthExpired) return;
+  const hadAccessToken = Boolean(readAccessToken());
   hasHandledAuthExpired = true;
   clearAuthLocalState();
   const isAuthPage = window.location.pathname.startsWith('/auth/');
-  if (!isAuthPage) {
+  if (!isAuthPage && hadAccessToken) {
     window.alert('登入已過期，請重新登入。');
   }
   window.location.assign('/auth/login');
