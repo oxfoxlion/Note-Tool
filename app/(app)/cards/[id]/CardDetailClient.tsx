@@ -50,7 +50,20 @@ export default function CardDetailPage() {
     router.push('/auth/login');
   }, [router]);
 
-  const { card, allCards, title, setTitle, content, setContent, tagsInput, setTagsInput, isSaving, error } = useCardDetailState({
+  const {
+    card,
+    allCards,
+    title,
+    setTitle,
+    content,
+    setContent,
+    tagsInput,
+    setTagsInput,
+    isSaving,
+    hasPendingChanges,
+    saveNow,
+    error,
+  } = useCardDetailState({
     cardId,
     autosaveEnabled: activeViewMode !== 'view',
     onUnauthorized: handleUnauthorized,
@@ -226,6 +239,10 @@ export default function CardDetailPage() {
             mentionMenuRef={mentions.mentionMenuRef}
             onMentionSelect={mentions.handleMentionSelect}
             isSaving={isSaving}
+            hasPendingChanges={hasPendingChanges}
+            onSaveNow={() => {
+              void saveNow();
+            }}
           />
           <div className="h-full w-px bg-border" />
           <CardPreviewPane
@@ -252,6 +269,10 @@ export default function CardDetailPage() {
           mentionMenuRef={mentions.mentionMenuRef}
           onMentionSelect={mentions.handleMentionSelect}
           isSaving={isSaving}
+          hasPendingChanges={hasPendingChanges}
+          onSaveNow={() => {
+            void saveNow();
+          }}
         />
       ) : (
         <CardPreviewPane

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, getCards, updateCard } from '../lib/noteToolApi';
 
 type UseCardDetailStateParams = {
@@ -29,15 +29,61 @@ export function useCardDetailState({
     tags: '',
   });
 
-  const normalizeTags = (raw: string) =>
-    Array.from(
-      new Set(
-        raw
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter((tag) => tag.length > 0)
-      )
+  const normalizeTags = useCallback(
+    (raw: string) =>
+      Array.from(
+        new Set(
+          raw
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0)
+        )
+      ),
+    []
+  );
+
+  const hasPendingChanges =
+    !!card &&
+    !(
+      title === lastSavedRef.current.title &&
+      content === lastSavedRef.current.content &&
+      normalizeTags(tagsInput).join(',') === lastSavedRef.current.tags
     );
+
+  const saveNow = useCallback(async () => {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (!card) return false;
+    const normalizedTags = normalizeTags(tagsInput);
+    const tagsKey = normalizedTags.join(',');
+    if (
+      title === lastSavedRef.current.title &&
+      content === lastSavedRef.current.content &&
+      tagsKey === lastSavedRef.current.tags
+    ) {
+      return false;
+    }
+
+    setIsSaving(true);
+    setError('');
+    try {
+      const updated = await updateCard(card.id, { title, content, tags: normalizedTags });
+      setCard(updated);
+      lastSavedRef.current = { title, content, tags: tagsKey };
+      return true;
+    } catch (err: unknown) {
+      if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
+        onUnauthorized();
+        return false;
+      }
+      setError('Failed to save card.');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [card, title, content, tagsInput, normalizeTags, onUnauthorized]);
 
   useEffect(() => {
     const load = async () => {
@@ -77,28 +123,12 @@ export function useCardDetailState({
   useEffect(() => {
     if (!card) return;
     if (!autosaveEnabled) return;
-    const normalizedTags = normalizeTags(tagsInput);
-    const tagsKey = normalizedTags.join(',');
-    if (
-      title === lastSavedRef.current.title &&
-      content === lastSavedRef.current.content &&
-      tagsKey === lastSavedRef.current.tags
-    ) {
-      return;
-    }
+    if (!hasPendingChanges) return;
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
     }
     autosaveTimerRef.current = window.setTimeout(() => {
-      setIsSaving(true);
-      updateCard(card.id, { title, content, tags: normalizedTags })
-        .then((updated) => {
-          setCard(updated);
-          lastSavedRef.current = { title, content, tags: tagsKey };
-        })
-        .finally(() => {
-          setIsSaving(false);
-        });
+      void saveNow();
     }, 800);
 
     return () => {
@@ -106,7 +136,7 @@ export function useCardDetailState({
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [card, autosaveEnabled, title, content, tagsInput]);
+  }, [card, autosaveEnabled, hasPendingChanges, saveNow]);
 
   return {
     card,
@@ -119,6 +149,8 @@ export function useCardDetailState({
     tagsInput,
     setTagsInput,
     isSaving,
+    hasPendingChanges,
+    saveNow,
     error,
   };
 }

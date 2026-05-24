@@ -21,6 +21,8 @@ type CardEditorPaneProps = {
   mentionMenuRef: RefObject<HTMLDivElement | null>;
   onMentionSelect: (item: Card) => void;
   isSaving: boolean;
+  hasPendingChanges: boolean;
+  onSaveNow: () => void;
 };
 
 export default function CardEditorPane({
@@ -38,6 +40,8 @@ export default function CardEditorPane({
   mentionMenuRef,
   onMentionSelect,
   isSaving,
+  hasPendingChanges,
+  onSaveNow,
 }: CardEditorPaneProps) {
   return (
     <div className="flex min-h-0 flex-col gap-4">
@@ -55,7 +59,17 @@ export default function CardEditorPane({
           onSelect={onMentionSelect}
         />
       </div>
-      <div className="flex justify-end text-xs text-muted-foreground">{isSaving ? 'Saving…' : 'Autosave on'}</div>
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{isSaving ? 'Saving…' : 'Autosave on'}</span>
+        <button
+          type="button"
+          className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-card-foreground transition hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onSaveNow}
+          disabled={isSaving || !hasPendingChanges}
+        >
+          儲存
+        </button>
+      </div>
     </div>
   );
 }

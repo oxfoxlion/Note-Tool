@@ -146,6 +146,44 @@ export default function CardOverlay({
     );
   }, []);
 
+  const hasPendingChanges = useMemo(() => {
+    const tagsKey = normalizeTags(tagsInput).join(',');
+    return !(
+      title === lastSavedRef.current.title &&
+      content === lastSavedRef.current.content &&
+      tagsKey === lastSavedRef.current.tags &&
+      selectedFolderId === lastSavedRef.current.folderId
+    );
+  }, [title, content, tagsInput, selectedFolderId, normalizeTags]);
+
+  const saveNow = useCallback(async () => {
+    const normalizedTags = normalizeTags(tagsInput);
+    const tagsKey = normalizedTags.join(',');
+    const folderIdKey = selectedFolderId;
+    if (
+      title === lastSavedRef.current.title &&
+      content === lastSavedRef.current.content &&
+      tagsKey === lastSavedRef.current.tags &&
+      folderIdKey === lastSavedRef.current.folderId
+    ) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await Promise.resolve(
+        onSave({
+          title,
+          content,
+          tags: normalizedTags,
+          folder_id: selectedFolderId ? Number(selectedFolderId) : null,
+        })
+      );
+      lastSavedRef.current = { title, content, tags: tagsKey, folderId: folderIdKey };
+    } finally {
+      setIsSaving(false);
+    }
+  }, [title, content, tagsInput, selectedFolderId, onSave, normalizeTags]);
+
   useEffect(() => {
     if (!showCopyToSpace) return;
     let active = true;
@@ -229,36 +267,19 @@ export default function CardOverlay({
   useEffect(() => {
     if (readOnly) return;
     if (viewMode === 'view') return;
-    const normalizedTags = normalizeTags(tagsInput);
-    const tagsKey = normalizedTags.join(',');
-    const folderIdKey = selectedFolderId;
-    if (
-      title === lastSavedRef.current.title &&
-      content === lastSavedRef.current.content &&
-      tagsKey === lastSavedRef.current.tags &&
-      folderIdKey === lastSavedRef.current.folderId
-    ) {
-      return;
-    }
+    if (!hasPendingChanges) return;
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
     }
     autosaveTimerRef.current = window.setTimeout(() => {
-      setIsSaving(true);
-      Promise.resolve(onSave({ title, content, tags: normalizedTags, folder_id: selectedFolderId ? Number(selectedFolderId) : null }))
-        .then(() => {
-          lastSavedRef.current = { title, content, tags: tagsKey, folderId: folderIdKey };
-        })
-        .finally(() => {
-          setIsSaving(false);
-        });
+      void saveNow();
     }, 800);
     return () => {
       if (autosaveTimerRef.current) {
         window.clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [title, content, tagsInput, selectedFolderId, viewMode, onSave, readOnly, normalizeTags]);
+  }, [viewMode, readOnly, hasPendingChanges, saveNow]);
 
   const mergedCards = useMemo(() => {
     const merged = new Map<number, Card>();
@@ -900,7 +921,24 @@ export default function CardOverlay({
                   ))}
                 </select>
               </label>
-              <div className="flex justify-end text-xs text-muted-foreground">{isSaving ? 'Saving…' : 'Autosave on'}</div>
+              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>{isSaving ? 'Saving…' : 'Autosave on'}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSaving || !hasPendingChanges}
+                  onClick={() => {
+                    if (autosaveTimerRef.current) {
+                      window.clearTimeout(autosaveTimerRef.current);
+                      autosaveTimerRef.current = null;
+                    }
+                    void saveNow();
+                  }}
+                >
+                  儲存
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-6" onClickCapture={handleViewClickCapture}>
