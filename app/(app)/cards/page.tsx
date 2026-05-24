@@ -169,6 +169,7 @@ export default function CardsPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
       try {
         const [cardsData, boardsData, foldersData, settingsData] = await Promise.all([
@@ -177,6 +178,7 @@ export default function CardsPage() {
           getCardFolders(currentSpaceId),
           getUserSettings(),
         ]);
+        if (!active) return;
         const normalizedCardsData = normalizeCards(cardsData);
         setCards(normalizedCardsData);
         setAllCards(normalizedCardsData);
@@ -189,6 +191,7 @@ export default function CardsPage() {
           setCardPreviewLength(settingsData.cardPreviewLength);
         }
       } catch (err: unknown) {
+        if (!active) return;
         if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
           router.push('/auth/login');
           return;
@@ -197,6 +200,9 @@ export default function CardsPage() {
       }
     };
     load();
+    return () => {
+      active = false;
+    };
   }, [router, currentSpaceId, normalizeCards, normalizeFolders]);
 
   useEffect(() => {
@@ -216,13 +222,16 @@ export default function CardsPage() {
     boardFilter && boards.some((board) => String(board.id) === boardFilter) ? boardFilter : '';
 
   useEffect(() => {
+    let active = true;
     const loadBoardCards = async () => {
       if (effectiveBoardFilter) {
         try {
           const data = await getBoard(Number(effectiveBoardFilter));
+          if (!active) return;
           setCards(normalizeCards(data.cards));
           return;
         } catch (err: unknown) {
+          if (!active) return;
           if ((err as { message?: string })?.message === 'UNAUTHORIZED') {
             router.push('/auth/login');
             return;
@@ -231,9 +240,13 @@ export default function CardsPage() {
           return;
         }
       }
+      if (!active) return;
       setCards(allCards);
     };
     void loadBoardCards();
+    return () => {
+      active = false;
+    };
   }, [effectiveBoardFilter, allCards, router, normalizeCards]);
 
   const effectiveTagFilter = useMemo(() => {

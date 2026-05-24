@@ -2088,7 +2088,7 @@ export default function BoardDetailPage() {
                     }
                     setSelectedCard(card);
                   }}
-                  className={`absolute select-none transition-all duration-300 ${
+                  className={`absolute select-none transition-shadow duration-150 ${
                     tool === 'add' ? 'cursor-grab' : 'cursor-default'
                   } ${
                     flashCardId === card.id
